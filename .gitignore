@@ -1,0 +1,5 @@
+# 재생성 가능한 산출물
+db/housing.db
+__pycache__/
+*.pyc
+.DS_Store

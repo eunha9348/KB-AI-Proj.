@@ -1,0 +1,3 @@
+# 프로토타입은 Python 표준 라이브러리만으로 실행됩니다 (sqlite3, http.server).
+# 아래는 '선택'으로, 있으면 백엔드가 Flask 로 구동됩니다.
+Flask>=3.0 ; python_version >= "3.9"
