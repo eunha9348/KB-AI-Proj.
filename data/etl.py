@@ -68,6 +68,19 @@ DISTRICTS = [
 
 BUILDING_TYPES = ["오피스텔", "다세대", "빌라", "도시형생활주택", "아파트"]
 
+# 유형별 시세 배율. 서울시 열린데이터광장 avg_sale_price는 자치구 평균(아파트 실거래
+# 위주)이므로, 소형 주거유형(오피스텔·다세대·빌라 등 청년 1인가구 주 거주형태)은
+# 같은 자치구 안에서도 아파트보다 훨씬 낮게 거래되는 실제 시장 구조를 반영해 축소한다.
+# 이렇게 해야 보증금 규모가 골고루 퍼져 KB 상품 매칭(버팀목/HF/HUG/SGI)도 자치구
+# 평균값 하나에 쏠리지 않고 다양화된다.
+BUILDING_TYPE_PRICE_FACTOR = {
+    "오피스텔": 0.55,
+    "다세대": 0.42,
+    "빌라": 0.38,
+    "도시형생활주택": 0.48,
+    "아파트": 1.0,
+}
+
 
 def init_db(conn):
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -151,8 +164,8 @@ def generate_properties(conn, per_district=12):
             area = round(random.uniform(24, 59), 1)
             build_year = random.randint(1998, 2022)
 
-            # 시세: 구 평균 ± 30%
-            sale_price = int(avg_sale * random.uniform(0.7, 1.3))
+            # 시세: 구 평균(아파트 기준) × 유형별 배율 × ±30% 산포
+            sale_price = int(avg_sale * BUILDING_TYPE_PRICE_FACTOR[btype] * random.uniform(0.7, 1.3))
             # 전세가율: 대체로 55~95%, 일부 극단(깡통) 케이스
             jeonse_ratio = random.choices(
                 [random.uniform(0.5, 0.7),
