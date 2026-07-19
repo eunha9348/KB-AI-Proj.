@@ -7,9 +7,10 @@ kb_products.py — KB국민은행 실제 금융상품 마스터 + 위험도 기�
 상품이나 임의의 수치를 만들어내지 않기 위해, 확정 정보가 없는 항목(예: KB 청년 맞춤형
 전세자금대출의 COFIX 연동 변동금리)은 수치 대신 설명 텍스트로 남겨두었습니다.
 
-reference_url은 로그인 세션이 필요한 내부뱅킹 딥링크(obank.kbstar.com/quics?...) 대신
-항상 접속 가능한 기관 공식 도메인 루트만 사용한다 — 세션 없이 열면 빈 화면만 뜨는 딥링크를
-참고 URL로 노출하지 않기 위함.
+reference_url은 로그인 세션이 필요한 내부뱅킹 딥링크(obank.kbstar.com/quics?...) 대신,
+세션 없이 항상 열리는 각 상품별 공식 안내 페이지(kbthink.com의 상품 가이드, 또는
+주택도시보증공사 HUG의 해당 보증상품 소개 페이지)로 연결한다. 도메인 루트가 아니라
+"해당 상품 페이지로 바로 이동"이 목표이므로, 상품별로 서로 다른 세부 경로를 사용한다.
 
 매칭 알고리즘 (match_product)
   다음 순서로 매물을 KB국민은행 상품에 매칭한다.
@@ -47,7 +48,7 @@ PRODUCTS = {
         target_grade="안전·주의",
         description=("무주택 청년(만 19~34세) 대상 정부 정책 전세자금대출. 시중 은행 자체상품보다 "
                      "낮은 금리로, 보증금 3억원(수도권 일반 기준) 이하 물건에 우선 매칭된다."),
-        reference_url="https://nhuf.molit.go.kr",
+        reference_url="https://kbthink.com/loan-guide/beotimok-youth.html",
     ),
     "KB_YOUTH_JEONSE": dict(
         product_code="KB_YOUTH_JEONSE",
@@ -63,7 +64,7 @@ PRODUCTS = {
         description=("만 19~34세 무주택 청년 대상 KB 자체 전세자금대출. 임차보증금의 90% 이내, "
                      "최대 2억원. 한국주택금융공사(HF) 보증료 우대, 중도상환수수료 없음. "
                      "정부 정책자금 한도를 초과하는 보증금 물건에 매칭된다."),
-        reference_url="https://kbthink.com",
+        reference_url="https://kbthink.com/loan-guide/kb-youth-jeonse.html",
     ),
     "KB_STAR_HUG": dict(
         product_code="KB_STAR_HUG",
@@ -79,7 +80,7 @@ PRODUCTS = {
         description=("전세보증금반환보증이 함께 결합되는 HUG 연계 전세자금대출. 임차보증금의 "
                      "최대 80% 이내(채권보전조치 시 한도 확대 가능). 선순위채권비율이 높아 "
                      "반환보증 가입이 필요한 매물에 우선 매칭된다."),
-        reference_url="https://kbthink.com",
+        reference_url="https://www.khug.or.kr/khmb/m/hg/gg/relax/relaxsub3.jsp",
     ),
     "HUG_ANSIM_MANDATORY": dict(
         product_code="HUG_ANSIM_MANDATORY",
@@ -95,7 +96,7 @@ PRODUCTS = {
         description=("선순위채권(근저당+보증금)이 매매시세를 위협하는 고위험 매물입니다. "
                      "전세보증금반환보증 가입 가능 여부를 먼저 확인하고, 가입이 불가하다면 "
                      "계약 자체를 재검토해야 합니다. 이 단계에서는 대출 상품을 매칭하지 않습니다."),
-        reference_url="https://www.khug.or.kr",
+        reference_url="https://www.khug.or.kr/hug/web/ig/dr/igdr000001.jsp",
     ),
 }
 

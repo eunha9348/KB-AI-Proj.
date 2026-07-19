@@ -6002,7 +6002,7 @@
    "max_deposit_manwon": 30000,
    "target_grade": "안전·주의",
    "description": "무주택 청년(만 19~34세) 대상 정부 정책 전세자금대출. 시중 은행 자체상품보다 낮은 금리로, 보증금 3억원(수도권 일반 기준) 이하 물건에 우선 매칭된다.",
-   "reference_url": "https://nhuf.molit.go.kr"
+   "reference_url": "https://kbthink.com/loan-guide/beotimok-youth.html"
   },
   "KB_YOUTH_JEONSE": {
    "product_code": "KB_YOUTH_JEONSE",
@@ -6017,7 +6017,7 @@
    "max_deposit_manwon": null,
    "target_grade": "안전·주의 (버팀목 한도 초과)",
    "description": "만 19~34세 무주택 청년 대상 KB 자체 전세자금대출. 임차보증금의 90% 이내, 최대 2억원. 한국주택금융공사(HF) 보증료 우대, 중도상환수수료 없음. 정부 정책자금 한도를 초과하는 보증금 물건에 매칭된다.",
-   "reference_url": "https://kbthink.com"
+   "reference_url": "https://kbthink.com/loan-guide/kb-youth-jeonse.html"
   },
   "KB_STAR_HUG": {
    "product_code": "KB_STAR_HUG",
@@ -6032,7 +6032,7 @@
    "max_deposit_manwon": null,
    "target_grade": "경고",
    "description": "전세보증금반환보증이 함께 결합되는 HUG 연계 전세자금대출. 임차보증금의 최대 80% 이내(채권보전조치 시 한도 확대 가능). 선순위채권비율이 높아 반환보증 가입이 필요한 매물에 우선 매칭된다.",
-   "reference_url": "https://kbthink.com"
+   "reference_url": "https://www.khug.or.kr/khmb/m/hg/gg/relax/relaxsub3.jsp"
   },
   "HUG_ANSIM_MANDATORY": {
    "product_code": "HUG_ANSIM_MANDATORY",
@@ -6047,7 +6047,7 @@
    "max_deposit_manwon": null,
    "target_grade": "위험",
    "description": "선순위채권(근저당+보증금)이 매매시세를 위협하는 고위험 매물입니다. 전세보증금반환보증 가입 가능 여부를 먼저 확인하고, 가입이 불가하다면 계약 자체를 재검토해야 합니다. 이 단계에서는 대출 상품을 매칭하지 않습니다.",
-   "reference_url": "https://www.khug.or.kr"
+   "reference_url": "https://www.khug.or.kr/hug/web/ig/dr/igdr000001.jsp"
   }
  }
 }

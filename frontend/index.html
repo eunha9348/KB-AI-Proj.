@@ -281,7 +281,7 @@ async function showDetail(pid){
         ${prod.max_loan_manwon?`<div class="row"><span>최대한도</span><b>${fmt(prod.max_loan_manwon)}억</b></div>`:''}
       </div>
       <div class="pdesc" style="margin-top:8px;font-style:italic">매칭 근거: ${p.match_reason||''}</div>
-      ${prod.reference_url?`<div style="margin-top:8px"><a href="${prod.reference_url}" target="_blank" rel="noopener" style="font-size:12px">상품 자세히 보기 ↗</a></div>`:''}
+      ${prod.reference_url?`<div style="margin-top:8px"><a href="${prod.reference_url}" target="_blank" rel="noopener" style="font-size:12px">${prod.name} 안내 페이지로 이동 ↗</a></div>`:''}
     </div>`:''}`;
 }
 
