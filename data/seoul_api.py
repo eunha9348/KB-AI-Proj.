@@ -29,7 +29,8 @@ from collections import defaultdict
 
 BASE_URL = "http://openapi.seoul.go.kr:8088"
 PAGE_SIZE = 1000
-TIMEOUT = 10
+# GitHub Actions 등 해외 리전 러너에서 국내 정부망 API를 호출하면 지연이 흔해 여유를 둔다.
+TIMEOUT = 25
 
 SERVICE_RTMS = "tbLnOpendataRtms"      # 매매 실거래가
 SERVICE_RENT = "tbLnOpendataRentV"     # 전월세가
@@ -63,8 +64,13 @@ def _fetch_page(api_key, service, start, end):
         payload = json.loads(resp.read().decode("utf-8"))
     body = payload.get(service)
     if not body:
-        # 인증 오류 등은 RESULT 최상위에 바로 오는 경우가 있음
-        raise RuntimeError(f"[seoul_api] 예상치 못한 응답 형식: {list(payload.keys())}")
+        # 인증키 미승인/활용신청 미완료/트래픽 제한 등은 RESULT가 최상위에 바로 오는 경우가
+        # 있다. 원인 진단이 가능하도록 CODE/MESSAGE를 그대로 노출한다(추측해서 만들어내지 않음).
+        top_result = payload.get("RESULT")
+        if top_result:
+            raise RuntimeError(
+                f"[seoul_api] API 오류 응답 {top_result.get('CODE')}: {top_result.get('MESSAGE')}")
+        raise RuntimeError(f"[seoul_api] 예상치 못한 응답 형식: {list(payload.keys())} / 원본: {payload}")
     result = body.get("RESULT", {})
     code = result.get("CODE", "")
     if code and not code.startswith("INFO-0"):
