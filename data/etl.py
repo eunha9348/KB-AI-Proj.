@@ -3,16 +3,20 @@ etl.py — 공공데이터 → SQLite 적재 파이프라인 (프로토타입)
 
 동작:
   1) db/schema.sql 로 스키마 생성
-  2) 서울시 자치구 마스터 적재 (실제 좌표)
-  3) 실거래가 수집:
-       - SEOUL_API_KEY 환경변수가 있으면 서울시 열린데이터광장 '전월세가 실거래가' API 호출 시도
-       - 키가 없거나 네트워크 불가 시 → 통계적으로 그럴듯한 샘플 데이터 생성(FALLBACK)
-     * 어떤 경우에도 네이버/직방 등 무단 크롤링은 하지 않음 (컴플라이언스)
-  4) 개별 매물 생성 + risk_engine 으로 위험도 진단 후 적재
-  5) 금융상품 마스터 적재
+  2) 서울시 자치구 마스터 적재 (실제 좌표 + 기본 평균시세)
+  3) 자치구 평균 시세 갱신:
+       - SEOUL_API_KEY 환경변수가 있으면 서울 열린데이터광장 매매/전월세 실거래가 API를
+         실제로 호출해(seoul_api.py) 자치구별 평균 매매가·전세가를 실데이터로 덮어쓰고,
+         수집한 원본 거래를 transactions 테이블에 적재한다.
+       - 키가 없거나 API 호출이 실패하면 → 기본 평균시세(FALLBACK 상수)를 그대로 사용한다.
+     * 어떤 경우에도 네이버/직방 등 무단 크롤링은 하지 않는다 (컴플라이언스).
+  4) 개별 매물(리스팅) 생성: 근저당·위반건축물 등 등기부/건축물대장 제휴 데이터는 아직
+     연동되지 않았으므로 자치구 평균(실데이터 반영분 포함)을 기준으로 통계적으로 생성한다.
+  5) risk_engine 으로 위험도 진단 + kb_products 로 KB국민은행 실제 상품 매칭 후 적재
+  6) 금융상품 마스터(KB국민은행 실제 상품) 적재
 
-사용:  python data/etl.py         # 기본 각 구 12개 매물 생성
-       SEOUL_API_KEY=... python data/etl.py
+사용:  python data/etl.py                        # FALLBACK 평균시세로 매물 300건 생성
+       SEOUL_API_KEY=발급키 python data/etl.py     # 실제 서울시 실거래가로 자치구 평균시세 갱신
 """
 
 import os
@@ -21,6 +25,8 @@ import random
 from pathlib import Path
 
 from risk_engine import RiskInput, assess
+from kb_products import PRODUCTS, match_product
+import seoul_api
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "db" / "housing.db"
@@ -28,8 +34,9 @@ SCHEMA_PATH = ROOT / "db" / "schema.sql"
 
 random.seed(42)  # 재현성
 
-# 서울 자치구 대표 좌표 + 대략적 평균 시세(만원, 전용 60㎡ 환산 근사치)
-# 좌표는 공개된 자치구 중심 좌표. 시세는 프로토타입용 근사값.
+# 서울 자치구 대표 좌표 + FALLBACK 평균 시세(만원, 전용 60㎡ 환산 근사치)
+# 좌표는 공개된 자치구 중심 좌표. 시세는 SEOUL_API_KEY 미설정 시에만 사용되는 근사값이며,
+# 키가 있으면 seoul_api.fetch_district_averages() 의 실거래가 평균으로 대체된다.
 DISTRICTS = [
     # code,   name,     lat,      lng,      avg_sale, avg_jeonse
     ("11680", "강남구", 37.5172, 127.0473, 145000, 78000),
@@ -61,18 +68,6 @@ DISTRICTS = [
 
 BUILDING_TYPES = ["오피스텔", "다세대", "빌라", "도시형생활주택", "아파트"]
 
-FINANCE_PRODUCTS = [
-    # code, name, type, target_grade, base_rate, rate_adjust, desc
-    ("PREMIUM_LOAN", "청년 안심 전월세대출(우대)", "우대금리대출", "안전", 3.5, -0.8,
-     "선순위채권비율이 낮은 우량 매물 전용. 안전거래 장려 특별 우대금리 적용."),
-    ("STD_LOAN", "청년 전월세보증금 대출", "전월세대출", "주의", 3.5, 0.0,
-     "일반 전월세 보증금 대출 상품."),
-    ("HUG_INSURANCE", "전세보증금반환보증(HUG 연계)", "보증보험", "경고", 0.0, 0.0,
-     "깡통전세 위험 구간. 보증보험 가입을 최우선 권고."),
-    ("REJECT_OR_HUG", "고위험 매물 — 보증보험 필수 검토", "보증보험", "위험", 0.0, 0.0,
-     "선순위채권이 시세를 위협하는 고위험 매물. 보증보험 없이는 계약 비권장."),
-]
-
 
 def init_db(conn):
     conn.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
@@ -85,40 +80,69 @@ def load_districts(conn):
 
 
 def load_finance_products(conn):
+    cols = ["product_code", "name", "provider", "product_type", "guarantee_agency",
+            "rate_min", "rate_max", "rate_asof", "max_loan_manwon", "max_deposit_manwon",
+            "target_grade", "description", "reference_url"]
+    rows = [tuple(p[c] for c in cols) for p in PRODUCTS.values()]
+    placeholders = ",".join("?" * len(cols))
     conn.executemany(
-        "INSERT OR REPLACE INTO finance_products VALUES (?,?,?,?,?,?,?)",
-        FINANCE_PRODUCTS,
+        f"INSERT OR REPLACE INTO finance_products ({','.join(cols)}) VALUES ({placeholders})",
+        rows,
     )
 
 
-def try_fetch_seoul_api(district_code):
-    """서울시 열린데이터광장 실거래가 API 호출 시도. 실패하면 None 반환(→ FALLBACK).
-    실제 엔드포인트 형식만 갖춰두고, 키/네트워크 없으면 조용히 넘어간다."""
+def apply_real_seoul_data(conn):
+    """SEOUL_API_KEY 가 있으면 실제 자치구 평균 시세로 districts 테이블을 갱신하고
+    수집한 원본 거래를 transactions 테이블에 적재한다. 실패하면 조용히 FALLBACK 유지."""
     key = os.environ.get("SEOUL_API_KEY")
     if not key:
-        return None
+        print("[etl] SEOUL_API_KEY 미설정 → FALLBACK 평균시세 사용")
+        return False
+
+    print("[etl] SEOUL_API_KEY 감지 → 서울 열린데이터광장 실거래가 API 호출 시도")
     try:
-        import urllib.request, json
-        # 서울시 부동산 전월세가 실거래가 (tbLnOpendataRentV)
-        url = (f"http://openapi.seoul.go.kr:8088/{key}/json/"
-               f"tbLnOpendataRentV/1/50/")
-        with urllib.request.urlopen(url, timeout=8) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return data  # 파싱 로직은 실제 스키마 확정 후 구현
-    except Exception as e:  # 네트워크/인증 실패는 FALLBACK
-        print(f"[etl] Seoul API 호출 실패 → 샘플 생성으로 대체: {e}")
-        return None
+        averages, transactions = seoul_api.fetch_district_averages(key)
+    except Exception as e:
+        print(f"[etl] 실거래가 API 호출 실패 → FALLBACK 평균시세 유지: {e}")
+        return False
+
+    updated = 0
+    for code, agg in averages.items():
+        row = conn.execute(
+            "SELECT avg_sale_price, avg_jeonse FROM districts WHERE district_code=?",
+            (code,)).fetchone()
+        if row is None:
+            continue  # 우리 DISTRICTS 마스터에 없는 코드는 스킵 (서울 외 지역 등)
+        new_sale = agg["avg_sale"] or row[0]
+        new_jeonse = agg["avg_jeonse"] or row[1]
+        conn.execute(
+            "UPDATE districts SET avg_sale_price=?, avg_jeonse=? WHERE district_code=?",
+            (new_sale, new_jeonse, code))
+        updated += 1
+
+    for tx in transactions:
+        if not conn.execute("SELECT 1 FROM districts WHERE district_code=?",
+                            (tx["district_code"],)).fetchone():
+            continue
+        conn.execute(
+            """INSERT INTO transactions
+               (district_code, deal_type, price, monthly_rent, area_m2, build_year,
+                deal_date, raw_ref, source)
+               VALUES (?,?,?,?,?,?,?,?, 'seoul_open_data')""",
+            (tx["district_code"], tx["deal_type"], tx["price"], tx["monthly_rent"],
+             tx["area_m2"], tx["build_year"], tx["deal_date"], tx["raw_ref"]))
+
+    print(f"[etl] 실거래가 반영 완료: 자치구 {updated}개 평균시세 갱신, "
+          f"원본 거래 {len(transactions)}건 적재")
+    return True
 
 
 def generate_properties(conn, per_district=12):
-    """각 구별로 매물 생성 + 위험도 진단 후 적재."""
+    """자치구 평균 시세(실데이터 반영 가능) 기준으로 매물을 생성하고 위험도·KB상품을 매칭."""
     rows = conn.execute("SELECT district_code, name, lat, lng, avg_sale_price, "
                         "avg_jeonse FROM districts").fetchall()
     prop_count = 0
     for code, name, lat, lng, avg_sale, avg_jeonse in rows:
-        # 실 API 시도 (프로토타입에서는 반환값을 소비하지 않고 FALLBACK 사용)
-        try_fetch_seoul_api(code)
-
         for i in range(per_district):
             # 좌표: 구 중심 ± 약 0.02도 산포
             plat = round(lat + random.uniform(-0.018, 0.018), 6)
@@ -136,7 +160,7 @@ def generate_properties(conn, per_district=12):
                  random.uniform(0.85, 1.05)],
                 weights=[45, 35, 20])[0]
             deposit = int(sale_price * jeonse_ratio)
-            # 근저당: 0 ~ 시세의 60%
+            # 근저당: 0 ~ 시세의 60% (등기부 제휴 전이므로 통계적 추정)
             mortgage = int(sale_price * random.choices(
                 [0, random.uniform(0.05, 0.25), random.uniform(0.25, 0.6)],
                 weights=[35, 40, 25])[0])
@@ -152,13 +176,15 @@ def generate_properties(conn, per_district=12):
             pid = cur.lastrowid
 
             r = assess(RiskInput(sale_price, deposit, mortgage, bool(is_illegal)))
+            m = match_product(r.risk_score, r.risk_grade, r.jeonse_ratio,
+                               r.senior_debt_ratio, deposit)
             conn.execute(
                 """INSERT INTO risk_assessments
                    (property_id, jeonse_ratio, senior_debt_ratio, risk_score,
-                    risk_grade, recommended_product)
-                   VALUES (?,?,?,?,?,?)""",
+                    risk_grade, recommended_product, proposal_rate_adjust, match_reason)
+                   VALUES (?,?,?,?,?,?,?,?)""",
                 (pid, r.jeonse_ratio, r.senior_debt_ratio, r.risk_score,
-                 r.risk_grade, r.recommended_product))
+                 r.risk_grade, m.product_code, m.proposal_rate_adjust, m.match_reason))
             prop_count += 1
     return prop_count
 
@@ -172,16 +198,21 @@ def main():
         init_db(conn)
         load_districts(conn)
         load_finance_products(conn)
+        used_real_data = apply_real_seoul_data(conn)
         n = generate_properties(conn)
         conn.commit()
         print(f"[etl] 완료: {DB_PATH}")
-        print(f"[etl] 자치구 {len(DISTRICTS)}개, 금융상품 {len(FINANCE_PRODUCTS)}개, "
-              f"매물 {n}건 적재")
-        # 등급 분포 요약
+        print(f"[etl] 자치구 {len(DISTRICTS)}개 (평균시세 소스: "
+              f"{'서울 열린데이터광장 실거래가' if used_real_data else 'FALLBACK 근사값'}), "
+              f"금융상품 {len(PRODUCTS)}개, 매물 {n}건 적재")
         dist = conn.execute(
             "SELECT risk_grade, COUNT(*) FROM v_property_latest_risk "
             "GROUP BY risk_grade").fetchall()
         print("[etl] 위험등급 분포:", dict(dist))
+        prod = conn.execute(
+            "SELECT recommended_product, COUNT(*) FROM v_property_latest_risk "
+            "GROUP BY recommended_product").fetchall()
+        print("[etl] 추천 KB상품 분포:", dict(prod))
     finally:
         conn.close()
 

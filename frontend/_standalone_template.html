@@ -164,9 +164,10 @@
   </section>
 
   <p class="note">
-    ※ 매물 데이터는 서울시 자치구 실거래가 평균 기반의 <b>시연용 샘플</b>입니다.
+    ※ 자치구 평균 매매가·전세가는 <code>SEOUL_API_KEY</code> 설정 시 서울 열린데이터광장 실거래가로 갱신되며, 개별 매물 수치는 그 평균 기반의 <b>시연용 샘플</b>입니다.
     위험도(0~100)는 <code>선순위채권비율 = (근저당 + 보증금) / 매매가</code>, 전세가율, 위반건축물 여부를 결합해 산출합니다.
-    실서비스 전환 시 서울시 열린데이터광장·건축물대장·인터넷등기소 제휴 데이터로 대체됩니다.
+    추천 금융상품은 KB국민은행 실제 상품(청년 맞춤형 전세자금대출·버팀목·KB스타 HUG연계)을 위험등급·보증금 규모로 매칭합니다.
+    근저당·위반건축물 등 개별 매물 정보는 등기부·건축물대장·공인중개사 제휴 연동 후 실데이터로 대체됩니다.
   </p>
   <p class="foot">Bank AI Contest Prototype · 자체 SQLite DB → ETL → 위험도 엔진 → 지도/도표 시각화</p>
 </div>
@@ -240,13 +241,25 @@ function filtered(){
   return DATA.properties.filter(p=>(!d||p.district_name===d)&&(!g||p.risk_grade===g));
 }
 
+function buildRateTxt(prod, adjust){
+  if(prod.rate_min==null || prod.rate_max==null){
+    return `<span style="color:var(--muted)">${prod.rate_asof||'금리 정보 없음'}</span>`;
+  }
+  const lo=(prod.rate_min+adjust).toFixed(2), hi=(prod.rate_max+adjust).toFixed(2);
+  let txt = `연 <b>${lo}% ~ ${hi}%</b>`;
+  if(adjust){
+    txt += ` <span style="color:var(--muted)">(공시 ${prod.rate_min}%~${prod.rate_max}%, 제안 우대 ${adjust.toFixed(1)}%p 적용)</span>`;
+  } else {
+    txt += ` <span style="color:var(--muted)">(${prod.rate_asof||'공시금리'})</span>`;
+  }
+  return txt;
+}
+
 function showDetail(pid){
   const p=DATA.properties.find(x=>x.property_id===pid);
   const prod=(DATA.products||{})[p.recommended_product];
   const c=GC[p.risk_grade], deg=p.risk_score*3.6;
-  const rateTxt = prod && prod.base_rate>0
-    ? `적용금리 <b>${(prod.base_rate+prod.rate_adjust).toFixed(1)}%</b> <span style="color:var(--muted)">(기준 ${prod.base_rate}%${prod.rate_adjust?`, ${prod.rate_adjust<0?'우대':'가산'} ${Math.abs(prod.rate_adjust)}%p`:''})</span>`
-    : '보증보험 상품 (대출금리 해당 없음)';
+  const adjust = p.proposal_rate_adjust || 0;
   document.getElementById('detail').innerHTML=`
     <div class="addr">${p.address}</div>
     <div class="meta">${p.building_type||''} · 시세 ${fmt(p.sale_price)}억 · 보증금 ${fmt(p.deposit)}억${p.is_illegal?' · ⚠️ 위반건축물':''}</div>
@@ -264,10 +277,16 @@ function showDetail(pid){
       </div>
     </div>
     ${prod?`<div class="prod">
-      <span class="ptag">추천 · ${prod.product_type}</span>
+      <span class="ptag">${prod.provider} · ${prod.product_type}</span>
       <div class="pname">${prod.name}</div>
       <div class="pdesc">${prod.description}</div>
-      <div class="prate">${rateTxt}</div>
+      <div class="prate">${buildRateTxt(prod, adjust)}</div>
+      <div class="rows" style="margin-top:8px">
+        ${prod.guarantee_agency?`<div class="row"><span>보증기관</span><b>${prod.guarantee_agency}</b></div>`:''}
+        ${prod.max_loan_manwon?`<div class="row"><span>최대한도</span><b>${fmt(prod.max_loan_manwon)}억</b></div>`:''}
+      </div>
+      <div class="pdesc" style="margin-top:8px;font-style:italic">매칭 근거: ${p.match_reason||''}</div>
+      ${prod.reference_url?`<div style="margin-top:8px"><a href="${prod.reference_url}" target="_blank" rel="noopener" style="font-size:12px">상품 자세히 보기 ↗</a></div>`:''}
     </div>`:''}`;
 }
 

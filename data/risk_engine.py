@@ -8,7 +8,9 @@ risk_engine.py
       → 1.0 을 넘으면 경매 시 보증금 전액 회수가 불가능한 '깡통전세' 신호
   - 위반건축물 여부는 가산 위험
 
-산출된 0~100 점을 4단계 등급으로 매핑하고, 등급별 은행 금융상품을 추천한다.
+산출된 0~100 점을 4단계 등급으로 매핑한다. 등급별 금융상품 매칭은 이 모듈의 책임이 아니라
+`kb_products.match_product()` 가 위험등급 + 보증금 규모를 함께 고려해 수행한다
+(KB국민은행 실제 상품 마스터 및 매칭 알고리즘은 data/kb_products.py 참고).
 모든 입력값은 공공/제휴 데이터에서 나온 값이라는 전제(무단 크롤링 배제).
 """
 
@@ -29,7 +31,6 @@ class RiskResult:
     senior_debt_ratio: float
     risk_score: int
     risk_grade: str
-    recommended_product: str
 
 
 # 위험등급 임계치 (score 기준)
@@ -39,14 +40,6 @@ GRADE_BANDS = [
     (55, 80, "경고"),
     (80, 101, "위험"),
 ]
-
-# 등급 → 추천 금융상품 코드 (finance_products.product_code 와 연결)
-PRODUCT_BY_GRADE = {
-    "안전": "PREMIUM_LOAN",   # 안전 매물 우대금리 전월세 대출
-    "주의": "STD_LOAN",       # 일반 전월세 대출
-    "경고": "HUG_INSURANCE",  # 보증보험 필수 권고
-    "위험": "REJECT_OR_HUG",  # 인수 곤란 / 보증보험 가입 시에만 검토
-}
 
 
 def _grade_of(score: int) -> str:
@@ -86,12 +79,13 @@ def assess(inp: RiskInput) -> RiskResult:
         senior_debt_ratio=senior_debt_ratio,
         risk_score=score,
         risk_grade=grade,
-        recommended_product=PRODUCT_BY_GRADE[grade],
     )
 
 
 if __name__ == "__main__":
     # 간단한 자체 점검
+    from kb_products import match_product
+
     samples = [
         RiskInput(sale_price=30000, deposit=12000, mortgage_amount=3000),   # 안전
         RiskInput(sale_price=25000, deposit=20000, mortgage_amount=4000),   # 경고~위험
@@ -99,6 +93,8 @@ if __name__ == "__main__":
     ]
     for s in samples:
         r = assess(s)
+        m = match_product(r.risk_score, r.risk_grade, r.jeonse_ratio,
+                           r.senior_debt_ratio, s.deposit)
         print(f"매매 {s.sale_price} / 보증금 {s.deposit} / 근저당 {s.mortgage_amount} "
               f"=> 전세가율 {r.jeonse_ratio:.0%}, 선순위 {r.senior_debt_ratio:.0%}, "
-              f"위험도 {r.risk_score}점 [{r.risk_grade}] → {r.recommended_product}")
+              f"위험도 {r.risk_score}점 [{r.risk_grade}] → {m.product_code} ({m.match_reason})")
