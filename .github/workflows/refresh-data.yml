@@ -38,5 +38,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add frontend/data.json frontend/standalone.html
-          git diff --cached --quiet || git commit -m "chore: 실거래가 데이터 자동 갱신"
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: 실거래가 데이터 자동 갱신"
+          # 실행 도중(특히 오래된 실행을 Re-run했을 때) main이 앞서갈 수 있으므로,
+          # push 직전에 최신 main 위로 rebase해 fast-forward 아님 오류를 방지한다.
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
