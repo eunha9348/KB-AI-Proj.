@@ -1,11 +1,15 @@
 """
 kb_products.py — KB국민은행 실제 금융상품 마스터 + 위험도 기반 추천 알고리즘
 
-⚠️ 주의: 아래 금리·한도는 KB국민은행 공식 상품안내 페이지(kbthink.com, obank.kbstar.com)에
-공개된 정보를 기준으로 한 "참고값"입니다. 실제 적용금리는 신용도·COFIX 변동·정책 개정에
-따라 달라지므로, 실서비스 전환 시 KB국민은행 API/영업점을 통한 실시간 조회로 대체해야 합니다.
-존재하지 않는 상품이나 임의의 수치를 만들어내지 않기 위해, 확정 정보가 없는 항목(예: KB 청년
-맞춤형 전세자금대출의 COFIX 연동 변동금리)은 수치 대신 설명 텍스트로 남겨두었습니다.
+⚠️ 주의: 아래 금리·한도는 KB국민은행 공식 상품안내 채널(kbthink.com 등)에 공개된 정보를
+기준으로 한 "참고값"입니다. 실제 적용금리는 신용도·COFIX 변동·정책 개정에 따라 달라지므로,
+실서비스 전환 시 KB국민은행 API/영업점을 통한 실시간 조회로 대체해야 합니다. 존재하지 않는
+상품이나 임의의 수치를 만들어내지 않기 위해, 확정 정보가 없는 항목(예: KB 청년 맞춤형
+전세자금대출의 COFIX 연동 변동금리)은 수치 대신 설명 텍스트로 남겨두었습니다.
+
+reference_url은 로그인 세션이 필요한 내부뱅킹 딥링크(obank.kbstar.com/quics?...) 대신
+항상 접속 가능한 기관 공식 도메인 루트만 사용한다 — 세션 없이 열면 빈 화면만 뜨는 딥링크를
+참고 URL로 노출하지 않기 위함.
 
 매칭 알고리즘 (match_product)
   다음 순서로 매물을 KB국민은행 상품에 매칭한다.
@@ -43,7 +47,7 @@ PRODUCTS = {
         target_grade="안전·주의",
         description=("무주택 청년(만 19~34세) 대상 정부 정책 전세자금대출. 시중 은행 자체상품보다 "
                      "낮은 금리로, 보증금 3억원(수도권 일반 기준) 이하 물건에 우선 매칭된다."),
-        reference_url="https://kbthink.com/loan-guide/beotimok-youth.html",
+        reference_url="https://nhuf.molit.go.kr",
     ),
     "KB_YOUTH_JEONSE": dict(
         product_code="KB_YOUTH_JEONSE",
@@ -59,7 +63,7 @@ PRODUCTS = {
         description=("만 19~34세 무주택 청년 대상 KB 자체 전세자금대출. 임차보증금의 90% 이내, "
                      "최대 2억원. 한국주택금융공사(HF) 보증료 우대, 중도상환수수료 없음. "
                      "정부 정책자금 한도를 초과하는 보증금 물건에 매칭된다."),
-        reference_url="https://kbthink.com/loan-guide/kb-youth-jeonse.html",
+        reference_url="https://kbthink.com",
     ),
     "KB_STAR_HUG": dict(
         product_code="KB_STAR_HUG",
@@ -75,7 +79,7 @@ PRODUCTS = {
         description=("전세보증금반환보증이 함께 결합되는 HUG 연계 전세자금대출. 임차보증금의 "
                      "최대 80% 이내(채권보전조치 시 한도 확대 가능). 선순위채권비율이 높아 "
                      "반환보증 가입이 필요한 매물에 우선 매칭된다."),
-        reference_url="https://obank.kbstar.com/quics?page=C060283&brcode=LN20001364",
+        reference_url="https://kbthink.com",
     ),
     "HUG_ANSIM_MANDATORY": dict(
         product_code="HUG_ANSIM_MANDATORY",
@@ -91,7 +95,7 @@ PRODUCTS = {
         description=("선순위채권(근저당+보증금)이 매매시세를 위협하는 고위험 매물입니다. "
                      "전세보증금반환보증 가입 가능 여부를 먼저 확인하고, 가입이 불가하다면 "
                      "계약 자체를 재검토해야 합니다. 이 단계에서는 대출 상품을 매칭하지 않습니다."),
-        reference_url="https://www.khug.or.kr/hug/web/ig/dr/igdr000001.jsp",
+        reference_url="https://www.khug.or.kr",
     ),
 }
 

@@ -110,7 +110,9 @@ python data/build_standalone.py  # → frontend/standalone.html
 
 추천 상품은 위험등급 단일 기준이 아니라 **위험등급 + 보증금 규모**를 함께 보는
 다요소 매칭 알고리즘(`match_product()`)으로 결정됩니다. 모든 상품은 KB국민은행
-공식 상품안내(kbthink.com, obank.kbstar.com)에 실제로 존재하는 상품입니다.
+공식 상품안내(kbthink.com 등)에 실제로 존재하는 상품입니다. 참고 링크(`reference_url`)는
+로그인 세션이 있어야 렌더링되는 내부뱅킹 딥링크 대신, 세션 없이도 항상 열리는 기관 공식
+도메인(kbthink.com / nhuf.molit.go.kr / khug.or.kr)만 사용합니다.
 
 ```
 위험등급 '위험'  → 대출 매칭 보류, HUG 전세보증금반환보증 가입 필수 안내
