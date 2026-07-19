@@ -66,6 +66,15 @@ SEOUL_API_KEY=발급키 python data/etl.py
 #   API 키가 없거나 호출이 실패하면 자동으로 FALLBACK 평균시세를 사용합니다(서비스 중단 없음).
 ```
 
+**매번 커맨드에 키를 붙이기 귀찮다면 `.env` 파일 사용:**
+```bash
+cp .env.example .env      # 템플릿 복사
+vi .env                   # SEOUL_API_KEY=발급키 로 채워넣기
+python data/etl.py        # 이후로는 키 없이 그냥 실행해도 .env를 자동으로 읽는다
+```
+`.env`는 `.gitignore`에 등록되어 있어 **GitHub에는 절대 올라가지 않는다.** 저장소에 커밋되는
+파일은 값이 비어있는 템플릿(`.env.example`)뿐이며, 실제 키는 로컬 `.env`에만 존재한다.
+
 > **필드 매핑 안내:** `data/seoul_api.py` 의 `FIELD_CANDIDATES` 는 서울 열린데이터광장의
 > 통상적인 컬럼 명명 규칙(예: `SGG_CD`, `GRFE`, `THING_AMT` 등)을 후보로 등록해 두었습니다.
 > 실제 발급받은 키로 처음 호출했을 때 컬럼이 매칭되지 않으면, 에러 메시지에 표시되는

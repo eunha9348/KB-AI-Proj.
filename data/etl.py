@@ -17,6 +17,11 @@ etl.py — 공공데이터 → SQLite 적재 파이프라인 (프로토타입)
 
 사용:  python data/etl.py                        # FALLBACK 평균시세로 매물 300건 생성
        SEOUL_API_KEY=발급키 python data/etl.py     # 실제 서울시 실거래가로 자치구 평균시세 갱신
+
+키를 매번 커맨드에 붙이지 않으려면, 프로젝트 루트에 .env 파일을 만들고
+SEOUL_API_KEY=발급키 한 줄을 적어두면 된다(.env.example 참고). .env는 .gitignore에
+포함되어 있어 절대 GitHub에 올라가지 않는다 — 코드 파일에 실제 키를 적어 커밋하면
+공개 저장소에 그대로 노출되므로 하지 않는다.
 """
 
 import os
@@ -31,6 +36,22 @@ import seoul_api
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "db" / "housing.db"
 SCHEMA_PATH = ROOT / "db" / "schema.sql"
+
+
+def _load_dotenv(path: Path):
+    """.env 파일의 KEY=VALUE 줄을 os.environ에 주입한다(이미 설정된 환경변수는 덮지 않음)."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+_load_dotenv(ROOT / ".env")
 
 random.seed(42)  # 재현성
 
