@@ -26,7 +26,7 @@ import json
 import urllib.request
 import urllib.error
 from collections import defaultdict
-SEOUL_API_KEY = "6c414f575a65756e313139744c587a48"
+
 BASE_URL = "http://openapi.seoul.go.kr:8088"
 PAGE_SIZE = 1000
 TIMEOUT = 10
