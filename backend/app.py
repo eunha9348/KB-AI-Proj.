@@ -51,6 +51,8 @@ def get_districts():
         rows = c.execute("""
             SELECT d.district_code, d.name, d.lat, d.lng,
                    d.avg_sale_price, d.avg_jeonse,
+                   d.sale_source, d.jeonse_source, d.jeonse_cv,
+                   d.news_sentiment, d.sentiment_note,
                    COUNT(v.property_id) AS n,
                    ROUND(AVG(v.risk_score),1) AS avg_risk,
                    ROUND(AVG(v.jeonse_ratio),3) AS avg_jeonse_ratio
@@ -71,7 +73,25 @@ def get_stats():
         total = c.execute("SELECT COUNT(*) FROM v_property_latest_risk").fetchone()[0]
         avg_risk = c.execute(
             "SELECT ROUND(AVG(risk_score),1) FROM v_property_latest_risk").fetchone()[0]
-    return {"total": total, "avg_risk": avg_risk, "grade_distribution": grade}
+        # 데이터 출처 요약(정직성): 지표별 실API/FALLBACK 자치구 수
+        sale_real = c.execute("SELECT COUNT(*) FROM districts WHERE sale_source='seoul_open_data'").fetchone()[0]
+        jeonse_real = c.execute("SELECT COUNT(*) FROM districts WHERE jeonse_source='seoul_open_data'").fetchone()[0]
+        n_districts = c.execute("SELECT COUNT(*) FROM districts").fetchone()[0]
+        city_sentiment = c.execute(
+            "SELECT ROUND(MIN(news_sentiment),4) FROM districts").fetchone()[0]  # 상속 기준선=최소값
+        avg_context = c.execute(
+            "SELECT ROUND(AVG(context_score),3) FROM v_property_latest_risk").fetchone()[0]
+        avg_fund = c.execute(
+            "SELECT ROUND(AVG(fundamental_score),3) FROM v_property_latest_risk").fetchone()[0]
+    return {
+        "total": total, "avg_risk": avg_risk, "grade_distribution": grade,
+        "provenance": {
+            "n_districts": n_districts,
+            "sale_price_real": sale_real, "jeonse_price_real": jeonse_real,
+            "city_sentiment_baseline": city_sentiment,
+        },
+        "avg_context_score": avg_context, "avg_fundamental_score": avg_fund,
+    }
 
 
 # --------------------------------------------------------------------------

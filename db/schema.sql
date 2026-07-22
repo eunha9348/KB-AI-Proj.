@@ -19,7 +19,13 @@ CREATE TABLE IF NOT EXISTS districts (
     lat             REAL NOT NULL,             -- 자치구 대표 위도
     lng             REAL NOT NULL,             -- 자치구 대표 경도
     avg_sale_price  INTEGER,                   -- 지역 평균 매매가 (만원)
-    avg_jeonse      INTEGER                     -- 지역 평균 전세가 (만원)
+    avg_jeonse      INTEGER,                   -- 지역 평균 전세가 (만원)
+    -- 지표별 출처 추적(정직성): 실API 성공 지표만 'seoul_open_data', 실패 지표는 'fallback'
+    sale_source     TEXT DEFAULT 'fallback',
+    jeonse_source   TEXT DEFAULT 'fallback',
+    jeonse_cv       REAL DEFAULT 0,            -- 전세가 변동계수(표준편차/평균) — 실거래 기반
+    news_sentiment  REAL DEFAULT 0,            -- 뉴스 감성 위험지수 0~1 (news_sentiment.py)
+    sentiment_note  TEXT                        -- 감성 근거 요약(자치구 실명 근거 or 상속)
 );
 
 -- ---------------------------------------------------------------------
@@ -75,7 +81,9 @@ CREATE TABLE IF NOT EXISTS risk_assessments (
     property_id         INTEGER NOT NULL REFERENCES properties(property_id),
     jeonse_ratio        REAL,                  -- 전세가율 = 보증금/매매가
     senior_debt_ratio   REAL,                  -- 선순위채권비율 = (근저당+보증금)/매매가
-    risk_score          INTEGER NOT NULL,      -- 0~100 (높을수록 위험)
+    fundamental_score   REAL,                  -- 매물 펀더멘털 위험 f(0~1)
+    context_score       REAL,                  -- 지역 컨텍스트(변동성+뉴스감성) 위험 c(0~1)
+    risk_score          INTEGER NOT NULL,      -- 0~100 (높을수록 위험) = 100(0.78f+0.22c)
     risk_grade          TEXT NOT NULL,         -- 안전/주의/경고/위험
     recommended_product TEXT REFERENCES finance_products(product_code), -- 추천 금융상품 코드
     proposal_rate_adjust REAL DEFAULT 0,       -- 이 제안이 추가하는 차등우대(%p, 음수=우대)
@@ -109,9 +117,14 @@ CREATE TABLE IF NOT EXISTS finance_products (
 -- ---------------------------------------------------------------------
 CREATE VIEW IF NOT EXISTS v_property_latest_risk AS
 SELECT p.property_id, p.address, p.lat, p.lng, p.building_type,
+       p.area_m2, p.build_year,
        p.sale_price, p.deposit, p.mortgage_amount, p.is_illegal,
        d.name AS district_name,
-       r.jeonse_ratio, r.senior_debt_ratio, r.risk_score, r.risk_grade,
+       d.jeonse_cv AS district_jeonse_cv,
+       d.news_sentiment AS district_sentiment,
+       r.jeonse_ratio, r.senior_debt_ratio,
+       r.fundamental_score, r.context_score,
+       r.risk_score, r.risk_grade,
        r.recommended_product, r.proposal_rate_adjust, r.match_reason
 FROM properties p
 JOIN districts d ON d.district_code = p.district_code
