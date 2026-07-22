@@ -32,6 +32,7 @@ from pathlib import Path
 from risk_engine import RiskInput, assess
 from kb_products import PRODUCTS, match_product
 import seoul_api
+import news_sentiment
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "db" / "housing.db"
@@ -109,7 +110,9 @@ def init_db(conn):
 
 def load_districts(conn):
     conn.executemany(
-        "INSERT OR REPLACE INTO districts VALUES (?,?,?,?,?,?)", DISTRICTS
+        "INSERT OR REPLACE INTO districts "
+        "(district_code, name, lat, lng, avg_sale_price, avg_jeonse) "
+        "VALUES (?,?,?,?,?,?)", DISTRICTS
     )
 
 
@@ -131,15 +134,19 @@ def apply_real_seoul_data(conn):
     key = os.environ.get("SEOUL_API_KEY")
     if not key:
         print("[etl] SEOUL_API_KEY 미설정 → FALLBACK 평균시세 사용")
-        return False
+        return {"sale": False, "jeonse": False}
 
     print("[etl] SEOUL_API_KEY 감지 → 서울 열린데이터광장 실거래가 API 호출 시도")
     try:
-        averages, transactions = seoul_api.fetch_district_averages(key)
+        averages, transactions, prov = seoul_api.fetch_district_averages(key)
     except Exception as e:
         print(f"[etl] 실거래가 API 호출 실패 → FALLBACK 평균시세 유지: {e}")
-        return False
+        return {"sale": False, "jeonse": False}
 
+    # 지표별 출처를 정직하게 표기: 실제로 값이 산출된 지표만 실데이터로 표시하고,
+    # 실패한 지표는 FALLBACK 근사값과 'fallback' 출처를 유지한다.
+    sale_ok = prov.get("sale_from_api")
+    jeonse_ok = prov.get("jeonse_from_api")
     updated = 0
     for code, agg in averages.items():
         row = conn.execute(
@@ -147,11 +154,19 @@ def apply_real_seoul_data(conn):
             (code,)).fetchone()
         if row is None:
             continue  # 우리 DISTRICTS 마스터에 없는 코드는 스킵 (서울 외 지역 등)
-        new_sale = agg["avg_sale"] or row[0]
-        new_jeonse = agg["avg_jeonse"] or row[1]
+        new_sale = agg["avg_sale"] if (sale_ok and agg["avg_sale"]) else row[0]
+        new_jeonse = agg["avg_jeonse"] if (jeonse_ok and agg["avg_jeonse"]) else row[1]
+        # 전세가 변동계수(CV) = 표준편차/평균 (실거래 기반, 없으면 0=미상)
+        cv = 0.0
+        if jeonse_ok and agg.get("jeonse_std") and agg.get("avg_jeonse"):
+            cv = round(agg["jeonse_std"] / agg["avg_jeonse"], 4)
         conn.execute(
-            "UPDATE districts SET avg_sale_price=?, avg_jeonse=? WHERE district_code=?",
-            (new_sale, new_jeonse, code))
+            "UPDATE districts SET avg_sale_price=?, avg_jeonse=?, "
+            "sale_source=?, jeonse_source=?, jeonse_cv=? WHERE district_code=?",
+            (new_sale, new_jeonse,
+             "seoul_open_data" if (sale_ok and agg["avg_sale"]) else "fallback",
+             "seoul_open_data" if (jeonse_ok and agg["avg_jeonse"]) else "fallback",
+             cv, code))
         updated += 1
 
     for tx in transactions:
@@ -166,17 +181,39 @@ def apply_real_seoul_data(conn):
             (tx["district_code"], tx["deal_type"], tx["price"], tx["monthly_rent"],
              tx["area_m2"], tx["build_year"], tx["deal_date"], tx["raw_ref"]))
 
-    print(f"[etl] 실거래가 반영 완료: 자치구 {updated}개 평균시세 갱신, "
+    src_msg = (f"매매={'실API' if sale_ok else 'FALLBACK'}, "
+               f"전세={'실API' if jeonse_ok else 'FALLBACK'}")
+    if prov.get("sale_error"):
+        src_msg += f" (매매 오류: {prov['sale_error']})"
+    print(f"[etl] 실거래가 반영: 자치구 {updated}개 갱신 [{src_msg}], "
           f"원본 거래 {len(transactions)}건 적재")
-    return True
+    return {"sale": bool(sale_ok), "jeonse": bool(jeonse_ok)}
+
+
+def apply_news_sentiment(conn):
+    """뉴스 감성분석(2-gram, 실제 기사 코퍼스) 결과를 자치구에 반영한다.
+    감성은 실제 기사 기반이라 API 키 유무와 무관하게 항상 동작한다."""
+    analysis = news_sentiment.analyze()
+    names = [name for _, name, *_ in DISTRICTS]
+    scores = news_sentiment.all_district_scores(names)
+    for name, s in scores.items():
+        note = ("근거 %d건: %s" % (len(s["evidence"]), s["note"])) if not s["inherited"] \
+            else "서울 기준선 상속(자치구 실명 근거 없음)"
+        conn.execute("UPDATE districts SET news_sentiment=?, sentiment_note=? WHERE name=?",
+                     (s["score"], note, name))
+    print(f"[etl] 뉴스 감성분석 반영: 서울 기준선 {analysis['city_index']} "
+          f"(기사 {analysis['n_articles']}건, risk_mass {analysis['risk_mass']}), "
+          f"자치구 실명근거 {sum(1 for s in scores.values() if not s['inherited'])}곳")
+    return analysis
 
 
 def generate_properties(conn, per_district=12):
     """자치구 평균 시세(실데이터 반영 가능) 기준으로 매물을 생성하고 위험도·KB상품을 매칭."""
     rows = conn.execute("SELECT district_code, name, lat, lng, avg_sale_price, "
-                        "avg_jeonse FROM districts").fetchall()
+                        "avg_jeonse, jeonse_cv, news_sentiment FROM districts").fetchall()
+    city_baseline = news_sentiment.analyze()["city_index"]  # 감성 초과분 기준선
     prop_count = 0
-    for code, name, lat, lng, avg_sale, avg_jeonse in rows:
+    for code, name, lat, lng, avg_sale, avg_jeonse, jeonse_cv, sentiment in rows:
         for i in range(per_district):
             # 좌표: 구 중심 ± 약 0.02도 산포
             plat = round(lat + random.uniform(-0.018, 0.018), 6)
@@ -209,15 +246,22 @@ def generate_properties(conn, per_district=12):
                  build_year, sale_price, deposit, mortgage, is_illegal))
             pid = cur.lastrowid
 
-            r = assess(RiskInput(sale_price, deposit, mortgage, bool(is_illegal)))
+            r = assess(RiskInput(
+                sale_price, deposit, mortgage, bool(is_illegal),
+                building_type=btype, build_year=build_year,
+                district_jeonse_cv=jeonse_cv or 0.0,
+                district_sentiment=sentiment or 0.0,
+                city_sentiment_baseline=city_baseline))
             m = match_product(r.risk_score, r.risk_grade, r.jeonse_ratio,
                                r.senior_debt_ratio, deposit)
             conn.execute(
                 """INSERT INTO risk_assessments
-                   (property_id, jeonse_ratio, senior_debt_ratio, risk_score,
+                   (property_id, jeonse_ratio, senior_debt_ratio,
+                    fundamental_score, context_score, risk_score,
                     risk_grade, recommended_product, proposal_rate_adjust, match_reason)
-                   VALUES (?,?,?,?,?,?,?,?)""",
-                (pid, r.jeonse_ratio, r.senior_debt_ratio, r.risk_score,
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (pid, r.jeonse_ratio, r.senior_debt_ratio,
+                 r.fundamental_score, r.context_score, r.risk_score,
                  r.risk_grade, m.product_code, m.proposal_rate_adjust, m.match_reason))
             prop_count += 1
     return prop_count
@@ -232,12 +276,14 @@ def main():
         init_db(conn)
         load_districts(conn)
         load_finance_products(conn)
-        used_real_data = apply_real_seoul_data(conn)
-        n = generate_properties(conn)
+        real = apply_real_seoul_data(conn)          # 시세(매매/전세) 실API 반영
+        apply_news_sentiment(conn)                  # 뉴스 감성(2-gram, 실기사) 반영
+        n = generate_properties(conn)               # 감성·변동성 결합 위험도 산출
         conn.commit()
         print(f"[etl] 완료: {DB_PATH}")
-        print(f"[etl] 자치구 {len(DISTRICTS)}개 (평균시세 소스: "
-              f"{'서울 열린데이터광장 실거래가' if used_real_data else 'FALLBACK 근사값'}), "
+        sale_src = "실API" if real.get("sale") else "FALLBACK"
+        jeonse_src = "실API" if real.get("jeonse") else "FALLBACK"
+        print(f"[etl] 자치구 {len(DISTRICTS)}개 (매매시세={sale_src}, 전세시세={jeonse_src}), "
               f"금융상품 {len(PRODUCTS)}개, 매물 {n}건 적재")
         dist = conn.execute(
             "SELECT risk_grade, COUNT(*) FROM v_property_latest_risk "
