@@ -28,6 +28,9 @@ jobs:
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
         run: python data/etl.py
 
+      - name: 위험도 방법론 유효성 검증 (실데이터 기준 리포트 재생성)
+        run: python data/validate_risk.py
+
       - name: DB → JSON 내보내기
         run: python data/export_json.py
 
@@ -38,7 +41,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add frontend/data.json frontend/standalone.html
+          git add frontend/data.json frontend/standalone.html docs/risk_methodology_validation.md
           git diff --cached --quiet && exit 0
           git commit -m "chore: 실거래가 데이터 자동 갱신"
           # 실행 도중(특히 오래된 실행을 Re-run했을 때) main이 앞서갈 수 있으므로,
