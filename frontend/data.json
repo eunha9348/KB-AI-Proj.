@@ -5708,7 +5708,7 @@
    "lat": 37.5145,
    "lng": 127.106,
    "avg_sale_price": 110000,
-   "avg_jeonse": 63142,
+   "avg_jeonse": 53260,
    "n": 12,
    "avg_risk": 74.0,
    "avg_jeonse_ratio": 0.864
@@ -5719,7 +5719,7 @@
    "lat": 37.5124,
    "lng": 126.9393,
    "avg_sale_price": 76000,
-   "avg_jeonse": 47048,
+   "avg_jeonse": 53904,
    "n": 12,
    "avg_risk": 67.3,
    "avg_jeonse_ratio": 0.793
@@ -5730,7 +5730,7 @@
    "lat": 37.5301,
    "lng": 127.1238,
    "avg_sale_price": 84000,
-   "avg_jeonse": 47849,
+   "avg_jeonse": 46139,
    "n": 12,
    "avg_risk": 67.2,
    "avg_jeonse_ratio": 0.799
@@ -5741,7 +5741,7 @@
    "lat": 37.5744,
    "lng": 127.0396,
    "avg_sale_price": 66000,
-   "avg_jeonse": 39779,
+   "avg_jeonse": 41064,
    "n": 12,
    "avg_risk": 66.3,
    "avg_jeonse_ratio": 0.757
@@ -5752,7 +5752,7 @@
    "lat": 37.5385,
    "lng": 127.0823,
    "avg_sale_price": 82000,
-   "avg_jeonse": 41077,
+   "avg_jeonse": 36140,
    "n": 12,
    "avg_risk": 65.9,
    "avg_jeonse_ratio": 0.811
@@ -5763,7 +5763,7 @@
    "lat": 37.5509,
    "lng": 126.8495,
    "avg_sale_price": 70000,
-   "avg_jeonse": 36490,
+   "avg_jeonse": 34780,
    "n": 12,
    "avg_risk": 61.7,
    "avg_jeonse_ratio": 0.745
@@ -5774,7 +5774,7 @@
    "lat": 37.5634,
    "lng": 127.0369,
    "avg_sale_price": 90000,
-   "avg_jeonse": 54907,
+   "avg_jeonse": 58912,
    "n": 12,
    "avg_risk": 60.8,
    "avg_jeonse_ratio": 0.746
@@ -5785,7 +5785,7 @@
    "lat": 37.4837,
    "lng": 127.0324,
    "avg_sale_price": 138000,
-   "avg_jeonse": 65945,
+   "avg_jeonse": 63475,
    "n": 12,
    "avg_risk": 60.4,
    "avg_jeonse_ratio": 0.811
@@ -5796,7 +5796,7 @@
    "lat": 37.4569,
    "lng": 126.8955,
    "avg_sale_price": 58000,
-   "avg_jeonse": 25749,
+   "avg_jeonse": 23784,
    "n": 12,
    "avg_risk": 59.1,
    "avg_jeonse_ratio": 0.733
@@ -5807,7 +5807,7 @@
    "lat": 37.5791,
    "lng": 126.9368,
    "avg_sale_price": 74000,
-   "avg_jeonse": 48798,
+   "avg_jeonse": 53991,
    "n": 12,
    "avg_risk": 56.3,
    "avg_jeonse_ratio": 0.776
@@ -5818,7 +5818,7 @@
    "lat": 37.6396,
    "lng": 127.0257,
    "avg_sale_price": 52000,
-   "avg_jeonse": 30496,
+   "avg_jeonse": 29782,
    "n": 12,
    "avg_risk": 53.7,
    "avg_jeonse_ratio": 0.708
@@ -5829,7 +5829,7 @@
    "lat": 37.4954,
    "lng": 126.8874,
    "avg_sale_price": 62000,
-   "avg_jeonse": 34884,
+   "avg_jeonse": 31300,
    "n": 12,
    "avg_risk": 52.5,
    "avg_jeonse_ratio": 0.706
@@ -5840,7 +5840,7 @@
    "lat": 37.5264,
    "lng": 126.8962,
    "avg_sale_price": 78000,
-   "avg_jeonse": 48190,
+   "avg_jeonse": 42447,
    "n": 12,
    "avg_risk": 52.3,
    "avg_jeonse_ratio": 0.737
@@ -5851,7 +5851,7 @@
    "lat": 37.4784,
    "lng": 126.9516,
    "avg_sale_price": 60000,
-   "avg_jeonse": 33493,
+   "avg_jeonse": 36209,
    "n": 12,
    "avg_risk": 52.0,
    "avg_jeonse_ratio": 0.725
@@ -5862,7 +5862,7 @@
    "lat": 37.6063,
    "lng": 127.0925,
    "avg_sale_price": 52000,
-   "avg_jeonse": 33527,
+   "avg_jeonse": 30072,
    "n": 12,
    "avg_risk": 51.8,
    "avg_jeonse_ratio": 0.742
@@ -5873,7 +5873,7 @@
    "lat": 37.5894,
    "lng": 127.0167,
    "avg_sale_price": 68000,
-   "avg_jeonse": 42350,
+   "avg_jeonse": 44741,
    "n": 12,
    "avg_risk": 50.5,
    "avg_jeonse_ratio": 0.696
@@ -5884,7 +5884,7 @@
    "lat": 37.5636,
    "lng": 126.9976,
    "avg_sale_price": 90000,
-   "avg_jeonse": 39961,
+   "avg_jeonse": 48150,
    "n": 12,
    "avg_risk": 49.3,
    "avg_jeonse_ratio": 0.722
@@ -5895,7 +5895,7 @@
    "lat": 37.6542,
    "lng": 127.0568,
    "avg_sale_price": 55000,
-   "avg_jeonse": 32617,
+   "avg_jeonse": 32948,
    "n": 12,
    "avg_risk": 49.0,
    "avg_jeonse_ratio": 0.722
@@ -5906,7 +5906,7 @@
    "lat": 37.5735,
    "lng": 126.979,
    "avg_sale_price": 88000,
-   "avg_jeonse": 47162,
+   "avg_jeonse": 39000,
    "n": 12,
    "avg_risk": 48.7,
    "avg_jeonse_ratio": 0.749
@@ -5917,7 +5917,7 @@
    "lat": 37.5326,
    "lng": 126.9905,
    "avg_sale_price": 118000,
-   "avg_jeonse": 47811,
+   "avg_jeonse": 59045,
    "n": 12,
    "avg_risk": 46.8,
    "avg_jeonse_ratio": 0.687
@@ -5928,7 +5928,7 @@
    "lat": 37.6688,
    "lng": 127.0471,
    "avg_sale_price": 50000,
-   "avg_jeonse": 27744,
+   "avg_jeonse": 33136,
    "n": 12,
    "avg_risk": 45.9,
    "avg_jeonse_ratio": 0.708
@@ -5939,7 +5939,7 @@
    "lat": 37.5172,
    "lng": 127.0473,
    "avg_sale_price": 145000,
-   "avg_jeonse": 65850,
+   "avg_jeonse": 70399,
    "n": 12,
    "avg_risk": 44.3,
    "avg_jeonse_ratio": 0.714
@@ -5950,7 +5950,7 @@
    "lat": 37.6027,
    "lng": 126.9291,
    "avg_sale_price": 62000,
-   "avg_jeonse": 32468,
+   "avg_jeonse": 35491,
    "n": 12,
    "avg_risk": 44.1,
    "avg_jeonse_ratio": 0.708
@@ -5961,7 +5961,7 @@
    "lat": 37.5663,
    "lng": 126.9019,
    "avg_sale_price": 92000,
-   "avg_jeonse": 48272,
+   "avg_jeonse": 55581,
    "n": 12,
    "avg_risk": 38.0,
    "avg_jeonse_ratio": 0.612
@@ -5972,7 +5972,7 @@
    "lat": 37.5169,
    "lng": 126.8664,
    "avg_sale_price": 85000,
-   "avg_jeonse": 45841,
+   "avg_jeonse": 54151,
    "n": 12,
    "avg_risk": 36.0,
    "avg_jeonse_ratio": 0.65
