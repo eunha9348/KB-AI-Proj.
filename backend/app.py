@@ -83,12 +83,17 @@ def get_stats():
             "SELECT ROUND(AVG(context_score),3) FROM v_property_latest_risk").fetchone()[0]
         avg_fund = c.execute(
             "SELECT ROUND(AVG(fundamental_score),3) FROM v_property_latest_risk").fetchone()[0]
+        # 실거래 최신성: 실제 적재된 거래의 건수·날짜 범위(정직한 최신성 지표)
+        tx = c.execute(
+            "SELECT COUNT(*), MIN(deal_date), MAX(deal_date) FROM transactions").fetchone()
+        tx_count, tx_from, tx_to = tx[0], tx[1], tx[2]
     return {
         "total": total, "avg_risk": avg_risk, "grade_distribution": grade,
         "provenance": {
             "n_districts": n_districts,
             "sale_price_real": sale_real, "jeonse_price_real": jeonse_real,
             "city_sentiment_baseline": city_sentiment,
+            "tx_count": tx_count, "tx_from": tx_from, "tx_to": tx_to,
         },
         "avg_context_score": avg_context, "avg_fundamental_score": avg_fund,
     }

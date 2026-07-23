@@ -7916,7 +7916,10 @@
    "n_districts": 25,
    "sale_price_real": 0,
    "jeonse_price_real": 0,
-   "city_sentiment_baseline": 0.4675
+   "city_sentiment_baseline": 0.4675,
+   "tx_count": 0,
+   "tx_from": null,
+   "tx_to": null
   },
   "avg_context_score": 0.038,
   "avg_fundamental_score": 0.692

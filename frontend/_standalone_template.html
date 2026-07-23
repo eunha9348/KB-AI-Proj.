@@ -549,12 +549,16 @@ function gradeOf(s){return s>=80?'위험':s>=55?'경고':s>=30?'주의':'안전'
 function initProvenance(){
   const pv=DATA.stats.provenance||{}, n=DATA.news;
   const saleReal=pv.sale_price_real>0, jeonseReal=pv.jeonse_price_real>0;
+  const period = (pv.tx_from&&pv.tx_to)
+    ? `${pv.tx_from.slice(0,7)}~${pv.tx_to.slice(0,7)} · ${pv.tx_count.toLocaleString()}건`
+    : null;
   const chips=[
     [`매매시세`, saleReal?`실API ${pv.sale_price_real}구`:'FALLBACK 근사', saleReal?'real':'fb'],
     [`전세시세`, jeonseReal?`실API ${pv.jeonse_price_real}구`:'FALLBACK 근사', jeonseReal?'real':'fb'],
-    [`뉴스 감성`, `실기사 ${n.n_articles}건 · 기준선 ${n.city_index.toFixed(2)}`, 'live'],
-    [`컴플라이언스`, `공공·제휴 데이터 · 무단 크롤링 배제`, 'real'],
   ];
+  if(period) chips.push([`실거래 기간`, period, 'real']);
+  chips.push([`뉴스 감성`, `실기사 ${n.n_articles}건 · 기준선 ${n.city_index.toFixed(2)}`, 'live']);
+  chips.push([`컴플라이언스`, `공공·제휴 데이터 · 무단 크롤링 배제`, 'real']);
   document.getElementById('provenance').innerHTML=chips.map(([k,v,st])=>
     `<span class="prov-chip"><span class="st ${st}"></span>${k} <b>${v}</b></span>`).join('');
 }

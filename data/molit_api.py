@@ -117,13 +117,14 @@ def _fetch(url, key, lawd, ymd):
 def fetch_district_averages(key, district_codes, months=None, max_tx_store=800):
     """
     district_codes: [(법정동5자리, 자치구명), ...]  (etl.DISTRICTS 에서 전달)
-    months: 조회할 YYYYMM 리스트(기본: 최근 3개월). 데이터가 있는 달을 우선 사용.
+    months: 조회할 YYYYMM 리스트(기본: 최근 4개월). 최근 월은 신고 지연으로 표본이 적어,
+            여러 최근 월을 '합산'해 최신성과 표본 안정성을 동시에 확보한다.
 
     반환: (averages, transactions, provenance)  — seoul_api 와 동일 규격
       averages[code] = {name, avg_sale, n_sale, avg_jeonse, n_jeonse, jeonse_std}
     """
     if months is None:
-        months = _recent_months(3)
+        months = _recent_months(4)
 
     sale_bucket = defaultdict(list)
     jeonse_bucket = defaultdict(list)
@@ -131,23 +132,20 @@ def fetch_district_averages(key, district_codes, months=None, max_tx_store=800):
     unmatched = None
     prov = {"sale_from_api": False, "jeonse_from_api": False,
             "sale_error": None, "jeonse_error": None,
-            "n_sale_rows": 0, "n_jeonse_rows": 0, "source": "molit"}
+            "n_sale_rows": 0, "n_jeonse_rows": 0, "source": "molit",
+            "period": f"{months[-1]}~{months[0]}"}
 
     def collect(url, is_sale):
         nonlocal unmatched
         rows = 0
         err = None
         for code, name in district_codes:
-            got_month = False
+            # 최근 여러 달을 모두 합산(신고 지연 대비). 최신성은 period 로 표기.
             for ymd in months:
-                if got_month:
-                    break
                 try:
                     items = _fetch(url, key, code, ymd)
                 except Exception as e:
                     err = str(e)
-                    continue
-                if not items:
                     continue
                 for it in items:
                     if is_sale:
@@ -171,7 +169,6 @@ def fetch_district_averages(key, district_codes, months=None, max_tx_store=800):
                                     _tx(code, "전세" if mon == 0 else "월세", dep, mon, it))
                         elif unmatched is None:
                             unmatched = [c.tag for c in it]
-                got_month = True   # 이 달에 데이터가 있었으면 다음 달은 조회 안 함
         return rows, err
 
     prov["n_sale_rows"], prov["sale_error"] = collect(TRADE_URL, True)
