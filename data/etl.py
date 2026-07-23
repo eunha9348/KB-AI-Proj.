@@ -32,6 +32,7 @@ from pathlib import Path
 from risk_engine import RiskInput, assess
 from kb_products import PRODUCTS, match_product
 import seoul_api
+import molit_api
 import news_sentiment
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -131,22 +132,42 @@ def load_finance_products(conn):
 def apply_real_seoul_data(conn):
     """SEOUL_API_KEY 가 있으면 실제 자치구 평균 시세로 districts 테이블을 갱신하고
     수집한 원본 거래를 transactions 테이블에 적재한다. 실패하면 조용히 FALLBACK 유지."""
-    key = os.environ.get("SEOUL_API_KEY")
-    if not key:
-        print("[etl] SEOUL_API_KEY 미설정 → FALLBACK 평균시세 사용")
-        return {"sale": False, "jeonse": False}
+    molit_key = os.environ.get("MOLIT_API_KEY")
+    seoul_key = os.environ.get("SEOUL_API_KEY")
+    averages = transactions = prov = None
+    used_source = None
 
-    print("[etl] SEOUL_API_KEY 감지 → 서울 열린데이터광장 실거래가 API 호출 시도")
-    try:
-        averages, transactions, prov = seoul_api.fetch_district_averages(key)
-    except Exception as e:
-        print(f"[etl] 실거래가 API 호출 실패 → FALLBACK 평균시세 유지: {e}")
+    # 1순위: 국토부 data.go.kr(안정적 HTTPS). 2순위: 서울 열린데이터광장.
+    if molit_key:
+        print("[etl] MOLIT_API_KEY 감지 → 국토부 data.go.kr 실거래가 API 호출 시도")
+        try:
+            codes = [(c, n) for c, n, *_ in DISTRICTS]
+            averages, transactions, prov = molit_api.fetch_district_averages(molit_key, codes)
+            used_source = "국토부(data.go.kr)"
+        except Exception as e:
+            print(f"[etl] 국토부 API 실패: {e}")
+            averages = None
+    if averages is None and seoul_key:
+        print("[etl] 서울 열린데이터광장 실거래가 API 호출 시도")
+        try:
+            averages, transactions, prov = seoul_api.fetch_district_averages(seoul_key)
+            used_source = "서울 열린데이터광장"
+        except Exception as e:
+            print(f"[etl] 서울 API 실패: {e}")
+            averages = None
+    if averages is None:
+        if not molit_key and not seoul_key:
+            print("[etl] MOLIT_API_KEY/SEOUL_API_KEY 미설정 → FALLBACK 평균시세 사용")
+        else:
+            print("[etl] 모든 실거래가 API 실패 → FALLBACK 평균시세 유지")
         return {"sale": False, "jeonse": False}
+    print(f"[etl] 실데이터 소스: {used_source}")
 
     # 지표별 출처를 정직하게 표기: 실제로 값이 산출된 지표만 실데이터로 표시하고,
     # 실패한 지표는 FALLBACK 근사값과 'fallback' 출처를 유지한다.
     sale_ok = prov.get("sale_from_api")
     jeonse_ok = prov.get("jeonse_from_api")
+    real_src = "molit_api" if prov.get("source") == "molit" else "seoul_open_data"
     updated = 0
     for code, agg in averages.items():
         row = conn.execute(
@@ -164,11 +185,12 @@ def apply_real_seoul_data(conn):
             "UPDATE districts SET avg_sale_price=?, avg_jeonse=?, "
             "sale_source=?, jeonse_source=?, jeonse_cv=? WHERE district_code=?",
             (new_sale, new_jeonse,
-             "seoul_open_data" if (sale_ok and agg["avg_sale"]) else "fallback",
-             "seoul_open_data" if (jeonse_ok and agg["avg_jeonse"]) else "fallback",
+             real_src if (sale_ok and agg["avg_sale"]) else "fallback",
+             real_src if (jeonse_ok and agg["avg_jeonse"]) else "fallback",
              cv, code))
         updated += 1
 
+    tx_source = "molit_api" if prov.get("source") == "molit" else "seoul_open_data"
     for tx in transactions:
         if not conn.execute("SELECT 1 FROM districts WHERE district_code=?",
                             (tx["district_code"],)).fetchone():
@@ -177,9 +199,9 @@ def apply_real_seoul_data(conn):
             """INSERT INTO transactions
                (district_code, deal_type, price, monthly_rent, area_m2, build_year,
                 deal_date, raw_ref, source)
-               VALUES (?,?,?,?,?,?,?,?, 'seoul_open_data')""",
+               VALUES (?,?,?,?,?,?,?,?,?)""",
             (tx["district_code"], tx["deal_type"], tx["price"], tx["monthly_rent"],
-             tx["area_m2"], tx["build_year"], tx["deal_date"], tx["raw_ref"]))
+             tx["area_m2"], tx["build_year"], tx["deal_date"], tx["raw_ref"], tx_source))
 
     src_msg = (f"매매={'실API' if sale_ok else 'FALLBACK'}, "
                f"전세={'실API' if jeonse_ok else 'FALLBACK'}")
@@ -224,12 +246,18 @@ def generate_properties(conn, per_district=12):
 
             # 시세: 구 평균(아파트 기준) × 유형별 배율 × ±30% 산포
             sale_price = int(avg_sale * BUILDING_TYPE_PRICE_FACTOR[btype] * random.uniform(0.7, 1.3))
-            # 전세가율: 대체로 55~95%, 일부 극단(깡통) 케이스
-            jeonse_ratio = random.choices(
-                [random.uniform(0.5, 0.7),
-                 random.uniform(0.7, 0.85),
-                 random.uniform(0.85, 1.05)],
-                weights=[45, 35, 20])[0]
+            # 전세가율: 자치구 '실제' 전세가율(실거래 avg_jeonse/avg_sale)을 중심으로 표본화.
+            #   → 실API 로 갱신된 실데이터가 개별 매물 보증금·위험도에 실제로 반영된다.
+            if avg_jeonse and avg_sale:
+                base_ratio = min(max(avg_jeonse / avg_sale, 0.45), 0.85)
+            else:
+                base_ratio = 0.62
+            if btype != "아파트":
+                base_ratio += 0.06   # 비아파트는 전세가율이 높은 경향(갭 위험) — 실증 반영
+            jeonse_ratio = base_ratio * random.uniform(0.9, 1.15)
+            if random.random() < 0.12:            # 일부 깡통전세 꼬리
+                jeonse_ratio = random.uniform(0.95, 1.15)
+            jeonse_ratio = min(jeonse_ratio, 1.25)
             deposit = int(sale_price * jeonse_ratio)
             # 근저당: 0 ~ 시세의 60% (등기부 제휴 전이므로 통계적 추정)
             mortgage = int(sale_price * random.choices(

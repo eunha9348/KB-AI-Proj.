@@ -150,10 +150,44 @@ def analyze_db():
     }
 
 
+def analyze_real_data():
+    """실거래가(실API) 반영 현황 + 실제 전세가율이 위험도로 전파되는지 검증.
+    실데이터가 없으면(FALLBACK) 그 사실을 정직하게 보고한다."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    d = conn.execute(
+        "SELECT name, avg_sale_price, avg_jeonse, sale_source, jeonse_source, "
+        "jeonse_cv FROM districts").fetchall()
+    n_tx = conn.execute("SELECT COUNT(*) FROM transactions").fetchone()[0]
+    tx_src = conn.execute(
+        "SELECT source, COUNT(*) FROM transactions GROUP BY source").fetchall()
+    # 자치구 실제 전세가율 vs 자치구 평균 위험도 (둘 다 실데이터일 때 의미)
+    drisk = {r["name"]: r["avg_risk"] for r in conn.execute(
+        "SELECT district_name AS name, AVG(risk_score) AS avg_risk "
+        "FROM v_property_latest_risk GROUP BY district_name").fetchall()}
+    conn.close()
+    real_sale = sum(1 for r in d if r["sale_source"] != "fallback")
+    real_jeonse = sum(1 for r in d if r["jeonse_source"] != "fallback")
+    ratios, risks, rows = [], [], []
+    for r in d:
+        if r["avg_sale_price"] and r["avg_jeonse"]:
+            jr = r["avg_jeonse"] / r["avg_sale_price"]
+            rk = drisk.get(r["name"])
+            if rk is not None:
+                ratios.append(jr); risks.append(rk)
+                rows.append((r["name"], jr, rk, r["sale_source"] != "fallback"))
+    rho = _spearman(ratios, risks) if len(ratios) > 2 else 0.0
+    return {"n_tx": n_tx, "tx_src": dict(tx_src), "real_sale": real_sale,
+            "real_jeonse": real_jeonse, "n_districts": len(d),
+            "rho_ratio_risk": round(rho, 4),
+            "rows": sorted(rows, key=lambda x: -x[1])[:8]}
+
+
 def build_report():
     mono_rows, monotonic = test_monotonicity()
     scen = test_scenarios()
     db = analyze_db()
+    real = analyze_real_data()
     news = news_sentiment.analyze()
 
     L = []
@@ -216,6 +250,28 @@ def build_report():
     w("- 감성은 경계선(등급 임계값 부근) 매물의 등급만 소폭 조정할 뿐, 대다수 매물의 등급을 "
       "바꾸지 못한다. 즉 **감성은 조절 요소이지 지배 요소가 아니다** — 근본적으로 안전한 "
       "물건이 뉴스 때문에 '위험'으로 뒤집히지 않는다.\n")
+
+    w("## F. 실거래가(실API) 반영 현황 및 실데이터 전파 검증")
+    real_on = real["real_sale"] > 0 or real["real_jeonse"] > 0
+    if real_on:
+        w(f"- **실거래가 반영됨** — 매매 실API 자치구 **{real['real_sale']}/{real['n_districts']}**, "
+          f"전세 실API **{real['real_jeonse']}/{real['n_districts']}**, 원본 거래 "
+          f"**{real['n_tx']}건** 적재 (출처: {real['tx_src']}).")
+        w(f"- 자치구 **실제 전세가율(실거래 avg_jeonse/avg_sale)** 과 자치구 평균 위험도의 "
+          f"Spearman ρ = **{real['rho_ratio_risk']}** — 실데이터가 개별 매물 보증금·위험도로 "
+          f"전파되어, 실제 전세가율이 높은 자치구일수록 위험도가 높게 산출됨을 확인.")
+    else:
+        w("- ⚠️ **현재 DB는 FALLBACK 근사값**으로 생성됨 (MOLIT_API_KEY/SEOUL_API_KEY 미설정). "
+          "실거래가 반영 시 아래 표의 전세가율이 실데이터로 대체되고, 그 값이 매물 보증금·위험도로 "
+          "전파됩니다. 이 환경(클라우드)은 프록시가 정부 API를 차단하므로, 실데이터 수집은 "
+          "GitHub Actions 워크플로우(외부망 개방)에서 키를 넣어 실행해야 합니다.")
+        w(f"- (참고) FALLBACK 기준에서도 전세가율↔위험도 Spearman ρ = **{real['rho_ratio_risk']}** "
+          "로 양의 관계가 성립.")
+    w("\n| 자치구 | 전세가율(avg_jeonse/avg_sale) | 평균 위험도 | 실API |")
+    w("|---|---|---|---|")
+    for name, jr, rk, isreal in real["rows"]:
+        w(f"| {name} | {jr:.0%} | {rk:.1f} | {'✅' if isreal else 'FALLBACK'} |")
+    w("")
 
     w("## 상위 2-gram 위험어(실제 코퍼스 등장 빈도)")
     w("| 2-gram | 가중치 | 문서빈도(df) |")

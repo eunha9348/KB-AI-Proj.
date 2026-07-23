@@ -1,8 +1,8 @@
 name: 실거래가 데이터 갱신
 
-# 이 워크플로우는 GitHub 저장소 Secrets에 등록된 SEOUL_API_KEY만 사용합니다.
-# 키는 GitHub의 암호화된 시크릿 저장소에만 존재하며, 로그에도 자동으로 마스킹되어
-# 노출되지 않습니다. 로컬 컴퓨터·채팅·git 커밋 어디에도 실제 키가 남지 않습니다.
+# 이 워크플로우는 GitHub 저장소 Secrets(MOLIT_API_KEY / SEOUL_API_KEY)만 사용합니다.
+# 키는 GitHub의 암호화된 시크릿 저장소에만 존재하며 로그에 자동 마스킹됩니다.
+# MOLIT_API_KEY(국토부 data.go.kr)가 있으면 우선 사용(안정적), 없으면 SEOUL_API_KEY 사용.
 
 on:
   workflow_dispatch: {}   # GitHub 웹사이트의 "Run workflow" 버튼으로 수동 실행
@@ -22,8 +22,9 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: ETL (서울 열린데이터광장 실거래가 반영)
+      - name: ETL (국토부/서울 실거래가 반영)
         env:
+          MOLIT_API_KEY: ${{ secrets.MOLIT_API_KEY }}
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
         run: python data/etl.py
 

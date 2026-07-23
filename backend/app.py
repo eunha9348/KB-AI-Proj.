@@ -74,8 +74,8 @@ def get_stats():
         avg_risk = c.execute(
             "SELECT ROUND(AVG(risk_score),1) FROM v_property_latest_risk").fetchone()[0]
         # 데이터 출처 요약(정직성): 지표별 실API/FALLBACK 자치구 수
-        sale_real = c.execute("SELECT COUNT(*) FROM districts WHERE sale_source='seoul_open_data'").fetchone()[0]
-        jeonse_real = c.execute("SELECT COUNT(*) FROM districts WHERE jeonse_source='seoul_open_data'").fetchone()[0]
+        sale_real = c.execute("SELECT COUNT(*) FROM districts WHERE sale_source!='fallback'").fetchone()[0]
+        jeonse_real = c.execute("SELECT COUNT(*) FROM districts WHERE jeonse_source!='fallback'").fetchone()[0]
         n_districts = c.execute("SELECT COUNT(*) FROM districts").fetchone()[0]
         city_sentiment = c.execute(
             "SELECT ROUND(MIN(news_sentiment),4) FROM districts").fetchone()[0]  # 상속 기준선=최소값
