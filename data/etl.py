@@ -33,7 +33,10 @@ from risk_engine import RiskInput, assess
 from kb_products import PRODUCTS, match_product
 import seoul_api
 import molit_api
+import realprice_csv
 import news_sentiment
+
+from collections import defaultdict
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "db" / "housing.db"
@@ -295,6 +298,138 @@ def generate_properties(conn, per_district=12):
     return prop_count
 
 
+def apply_real_csv(conn, txs):
+    """국토부 실거래가 CSV 거래로 자치구 평균·변동성을 갱신하고 원본 거래를 적재한다."""
+    names = {name for _, name, *_ in DISTRICTS}
+    code_of = {name: code for code, name, *_ in DISTRICTS}
+    sale_by, jeonse_by = defaultdict(list), defaultdict(list)
+    for t in txs:
+        if t["district_name"] not in names:
+            continue
+        if t["deal_type"] == "매매":
+            sale_by[t["district_name"]].append(t["price"])
+        elif t["deal_type"] == "전세":
+            jeonse_by[t["district_name"]].append(t["price"])
+
+    def _std(xs):
+        if len(xs) < 2:
+            return None
+        mu = sum(xs) / len(xs)
+        return (sum((x - mu) ** 2 for x in xs) / len(xs)) ** 0.5
+
+    for name in names:
+        code = code_of[name]
+        cur = conn.execute("SELECT avg_sale_price, avg_jeonse FROM districts WHERE district_code=?",
+                           (code,)).fetchone()
+        sales, jeonses = sale_by.get(name, []), jeonse_by.get(name, [])
+        new_sale = round(sum(sales) / len(sales)) if sales else cur[0]
+        new_jeonse = round(sum(jeonses) / len(jeonses)) if jeonses else cur[1]
+        cv = 0.0
+        if jeonses and new_jeonse:
+            s = _std(jeonses)
+            cv = round(s / new_jeonse, 4) if s else 0.0
+        conn.execute(
+            "UPDATE districts SET avg_sale_price=?, avg_jeonse=?, sale_source=?, "
+            "jeonse_source=?, jeonse_cv=? WHERE district_code=?",
+            (new_sale, new_jeonse,
+             "molit_csv" if sales else "fallback",
+             "molit_csv" if jeonses else "fallback", cv, code))
+
+    stored = 0
+    for t in txs:
+        code = code_of.get(t["district_name"])
+        if not code:
+            continue
+        conn.execute(
+            """INSERT INTO transactions
+               (district_code, deal_type, price, monthly_rent, area_m2, build_year,
+                deal_date, raw_ref, source)
+               VALUES (?,?,?,?,?,?,?,?, 'molit_csv')""",
+            (code, t["deal_type"], t["price"], t.get("monthly", 0), t.get("area_m2"),
+             t.get("build_year"), t.get("deal_date"), t.get("complex")))
+        stored += 1
+    print(f"[etl] 국토부 CSV 실거래 {stored}건 적재 (매매 {sum(len(v) for v in sale_by.values())}, "
+          f"전세 {sum(len(v) for v in jeonse_by.values())})")
+    return {"sale": any(sale_by.values()), "jeonse": any(jeonse_by.values())}
+
+
+def generate_real_properties(conn, txs, city_baseline, per_cap=30):
+    """실제 전세 실거래(CSV)를 개별 매물로 생성한다 — 실단지명·실보증금·실면적.
+    매매 실거래로 단지/자치구 단가를 구해 매매가를 추정하고, 근저당은 '미확인'(debt_known=0)."""
+    from statistics import median
+    dctx = {name: (code, cv, sent) for code, name, cv, sent in conn.execute(
+        "SELECT district_code, name, jeonse_cv, news_sentiment FROM districts")}
+    coords = {name: (lat, lng) for name, lat, lng in conn.execute(
+        "SELECT name, lat, lng FROM districts")}
+
+    unit_complex, unit_district = defaultdict(list), defaultdict(list)
+    for t in txs:
+        if t["deal_type"] == "매매" and t.get("area_m2"):
+            u = t["price"] / t["area_m2"]
+            unit_complex[(t["district_name"], t["complex"])].append(u)
+            unit_district[t["district_name"]].append(u)
+
+    def est_sale(t):
+        area = t.get("area_m2") or 0
+        if not area:
+            return None
+        key = (t["district_name"], t["complex"])
+        if unit_complex.get(key):
+            u = median(unit_complex[key])
+        elif unit_district.get(t["district_name"]):
+            u = median(unit_district[t["district_name"]])
+        else:
+            return None
+        return int(u * area)
+
+    jeonse = [t for t in txs if t["deal_type"] == "전세"
+              and t.get("area_m2") and t["district_name"] in dctx]
+    random.shuffle(jeonse)
+    counts, n = defaultdict(int), 0
+    for t in jeonse:
+        d = t["district_name"]
+        if counts[d] >= per_cap:
+            continue
+        sale = est_sale(t)
+        if not sale or sale <= 0:
+            continue
+        code, cv, sent = dctx[d]
+        lat, lng = coords[d]
+        plat = round(lat + random.uniform(-0.02, 0.02), 6)
+        plng = round(lng + random.uniform(-0.025, 0.025), 6)
+        area, by = t["area_m2"], t.get("build_year")
+        comp = t["complex"] or "아파트"
+        floor = t.get("floor")
+        addr = f"{d} {comp}" + (f" 전용{area:.0f}㎡" if area else "") + \
+               (f" {floor}층" if floor else "")
+        deposit = t["price"]
+        cur = conn.execute(
+            """INSERT INTO properties
+               (district_code, address, complex_name, lat, lng, building_type, area_m2,
+                build_year, sale_price, deposit, mortgage_amount, is_illegal, debt_known, source)
+               VALUES (?,?,?,?,?,?,?,?,?,?,0,0,0,'molit_csv')""",
+            (code, addr, comp, plat, plng, "아파트", area, by, sale, deposit))
+        pid = cur.lastrowid
+        # 근저당 미확인 → 선순위채권비율 = 전세가율(확정 지표만 반영)
+        r = assess(RiskInput(sale, deposit, 0, False, "아파트", by,
+                             district_jeonse_cv=cv or 0.0, district_sentiment=sent or 0.0,
+                             city_sentiment_baseline=city_baseline))
+        m = match_product(r.risk_score, r.risk_grade, r.jeonse_ratio,
+                          r.senior_debt_ratio, deposit)
+        conn.execute(
+            """INSERT INTO risk_assessments
+               (property_id, jeonse_ratio, senior_debt_ratio, fundamental_score,
+                context_score, risk_score, risk_grade, recommended_product,
+                proposal_rate_adjust, match_reason)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (pid, r.jeonse_ratio, r.senior_debt_ratio, r.fundamental_score,
+             r.context_score, r.risk_score, r.risk_grade, m.product_code,
+             m.proposal_rate_adjust, m.match_reason))
+        counts[d] += 1
+        n += 1
+    return n
+
+
 def main():
     DB_PATH.parent.mkdir(exist_ok=True)
     if DB_PATH.exists():
@@ -304,15 +439,29 @@ def main():
         init_db(conn)
         load_districts(conn)
         load_finance_products(conn)
-        real = apply_real_seoul_data(conn)          # 시세(매매/전세) 실API 반영
-        apply_news_sentiment(conn)                  # 뉴스 감성(2-gram, 실기사) 반영
-        n = generate_properties(conn)               # 감성·변동성 결합 위험도 산출
+
+        city_baseline = news_sentiment.analyze()["city_index"]
+        district_names = {name for _, name, *_ in DISTRICTS}
+        # 0순위: rt.molit.go.kr 에서 받은 실거래가 CSV(키 불필요) → '실제 매물' 서비스
+        csv_txs, csv_files = realprice_csv.load_dir(ROOT / "data", district_names)
+        mode = None
+        if csv_txs:
+            print(f"[etl] 국토부 실거래가 CSV 감지: {csv_files} → 실제 매물 모드")
+            real = apply_real_csv(conn, csv_txs)
+            apply_news_sentiment(conn)
+            n = generate_real_properties(conn, csv_txs, city_baseline)
+            mode = "실거래 CSV(실제 매물)"
+        else:
+            real = apply_real_seoul_data(conn)      # 시세 실API(MOLIT→서울) 반영
+            apply_news_sentiment(conn)
+            n = generate_properties(conn)           # 감성·변동성 결합 위험도 산출(시연 샘플)
+            mode = "시연 샘플"
         conn.commit()
         print(f"[etl] 완료: {DB_PATH}")
-        sale_src = "실API" if real.get("sale") else "FALLBACK"
-        jeonse_src = "실API" if real.get("jeonse") else "FALLBACK"
-        print(f"[etl] 자치구 {len(DISTRICTS)}개 (매매시세={sale_src}, 전세시세={jeonse_src}), "
-              f"금융상품 {len(PRODUCTS)}개, 매물 {n}건 적재")
+        sale_src = "실데이터" if real.get("sale") else "FALLBACK"
+        jeonse_src = "실데이터" if real.get("jeonse") else "FALLBACK"
+        print(f"[etl] 모드={mode} · 자치구 {len(DISTRICTS)}개 "
+              f"(매매={sale_src}, 전세={jeonse_src}), 금융상품 {len(PRODUCTS)}개, 매물 {n}건")
         dist = conn.execute(
             "SELECT risk_grade, COUNT(*) FROM v_property_latest_risk "
             "GROUP BY risk_grade").fetchall()

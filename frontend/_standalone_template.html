@@ -151,6 +151,7 @@
   .meta{font-size:12px;color:var(--ink-faint);margin-top:3px;display:flex;gap:7px;flex-wrap:wrap;}
   .meta .badge{background:var(--inset);border-radius:5px;padding:1px 7px;color:var(--ink-soft);font-weight:600;}
   .meta .badge.warn{background:var(--danger-b);color:var(--danger);}
+  .meta .badge.real{background:var(--safe-b);color:var(--safe);font-weight:700;}
 
   .gauge{display:flex;align-items:center;gap:16px;}
   .ring{position:relative;width:96px;height:96px;flex:none;border-radius:50%;}
@@ -422,6 +423,10 @@ function showDetail(pid){
   const fundPts=78*(p.fundamental_score||0), ctxPts=22*(p.context_score||0);
   const tot=Math.max(fundPts+ctxPts,0.01);
   const senti=p.district_sentiment||0;
+  const isReal = p.source==='molit_csv';           // 국토부 실거래 기반 실제 매물
+  const debtKnown = p.debt_known!==0;              // 근저당(등기부) 확인 여부
+  const q = encodeURIComponent(p.complex_name ? (p.district_name+' '+p.complex_name)
+                                              : (p.district_name+' '+(p.building_type||'')));
 
   // 컨텍스트 근거(뉴스)
   let evi='';
@@ -438,6 +443,7 @@ function showDetail(pid){
     <div>
       <div class="addr">${p.address}</div>
       <div class="meta">
+        ${isReal?'<span class="badge real">✓ 국토부 실거래 기반 실제 매물</span>':'<span class="badge">시연 샘플</span>'}
         <span class="badge">${p.building_type||'-'}</span>
         <span class="badge">${p.build_year||'-'}년 준공</span>
         <span class="badge">전용 ${p.area_m2||'-'}㎡</span>
@@ -451,8 +457,8 @@ function showDetail(pid){
       </div>
       <div>
         <span class="grade-pill" style="background:${c}">${g}</span>
-        <div class="who">시세 <b>${eok(p.sale_price)}억</b> · 보증금 <b>${eok(p.deposit)}억</b><br/>
-          근저당 ${eok(p.mortgage_amount)}억 설정</div>
+        <div class="who">${isReal?'실거래가 ':'시세 '}<b>${eok(p.sale_price)}억</b>${isReal?'(추정)':''} · 보증금 <b>${eok(p.deposit)}억</b><br/>
+          ${debtKnown?'근저당 '+eok(p.mortgage_amount)+'억 설정':'근저당 미확인 (등기부 제휴 시 반영)'}</div>
       </div>
     </div>
 
@@ -470,10 +476,11 @@ function showDetail(pid){
       <div class="section-label">금융·물건 지표 (펀더멘털)</div>
       <div class="rows">
         ${meterRow('전세가율', pct(p.jeonse_ratio), p.jeonse_ratio, p.jeonse_ratio>0.8?cv('--alert'):cv('--accent'))}
-        ${meterRow('선순위채권비율', `<b style="color:${p.senior_debt_ratio>1?c:'inherit'}">${pct(p.senior_debt_ratio)}</b>`, p.senior_debt_ratio, p.senior_debt_ratio>1?cv('--danger'):p.senior_debt_ratio>0.7?cv('--alert'):cv('--safe'))}
+        ${meterRow('선순위채권비율'+(debtKnown?'':'*'), `<b style="color:${p.senior_debt_ratio>1?c:'inherit'}">${pct(p.senior_debt_ratio)}</b>`, p.senior_debt_ratio, p.senior_debt_ratio>1?cv('--danger'):p.senior_debt_ratio>0.7?cv('--alert'):cv('--safe'))}
         <div class="row"><span class="k">주거유형 위험</span><span class="v">${p.building_type||'-'}</span></div>
         <div class="row"><span class="k">건물 노후도</span><span class="v">${p.build_year?(2026-p.build_year)+'년':'-'}</span></div>
       </div>
+      ${debtKnown?'':'<div class="note" style="font-size:11px;color:var(--ink-faint);margin-top:6px">* 근저당(등기부)은 공공API로 제공되지 않아 미반영 → 선순위채권비율 = 전세가율. 등기부 제휴 연동 시 실제 근저당이 더해져 위험도가 상향될 수 있습니다.</div>'}
     </div>
 
     <div>
@@ -491,16 +498,18 @@ function showDetail(pid){
 
     <div>
       <div class="section-label">실제 위치·매물 확인</div>
-      <div class="verify-note">이 카드는 자치구 평균 기반 <b>시연 샘플</b>입니다(특정 실제 매물이 아님).
-        아래 버튼은 이 매물 <b>좌표·지역의 실제</b> 거리사진·지도·실거래가로 연결되어, 해당 위치에
-        실제 부동산·거래가 존재함을 직접 확인할 수 있습니다.</div>
+      <div class="verify-note">${isReal
+        ? `<b>${p.complex_name}</b>은(는) 국토부 실거래가에 <b>실제로 등록된 단지</b>입니다(계약: 실거래 기록).
+           아래 버튼으로 실제 거리사진·지도·매물을 확인하세요. (단, 개인정보보호로 동·호수는 비공개)`
+        : `이 카드는 자치구 평균 기반 <b>시연 샘플</b>입니다(특정 실제 매물이 아님). 아래 버튼은 이 매물
+           <b>좌표·지역의 실제</b> 거리사진·지도·실거래가로 연결됩니다.`}</div>
       <div class="verify-grid">
         <a class="vbtn" href="https://map.kakao.com/link/roadview/${p.lat},${p.lng}" target="_blank" rel="noopener">
           <span class="ico">📷</span>거리 사진(로드뷰)<span class="ext">↗</span></a>
-        <a class="vbtn" href="https://map.kakao.com/link/map/${encodeURIComponent(p.district_name)},${p.lat},${p.lng}" target="_blank" rel="noopener">
+        <a class="vbtn" href="https://map.kakao.com/link/map/${q.replace(/%20/g,'+')},${p.lat},${p.lng}" target="_blank" rel="noopener">
           <span class="ico">🗺️</span>지도에서 위치<span class="ext">↗</span></a>
-        <a class="vbtn" href="https://map.naver.com/p/search/${encodeURIComponent(p.district_name+' '+(p.building_type||''))}" target="_blank" rel="noopener">
-          <span class="ico">🏠</span>이 지역 매물·장소<span class="ext">↗</span></a>
+        <a class="vbtn" href="https://map.naver.com/p/search/${q}" target="_blank" rel="noopener">
+          <span class="ico">🏠</span>${isReal?'이 단지 검색':'이 지역 매물·장소'}<span class="ext">↗</span></a>
         <a class="vbtn" href="https://rt.molit.go.kr/" target="_blank" rel="noopener">
           <span class="ico">📊</span>국토부 실거래가<span class="ext">↗</span></a>
       </div>
@@ -549,13 +558,15 @@ function gradeOf(s){return s>=80?'위험':s>=55?'경고':s>=30?'주의':'안전'
 function initProvenance(){
   const pv=DATA.stats.provenance||{}, n=DATA.news;
   const saleReal=pv.sale_price_real>0, jeonseReal=pv.jeonse_price_real>0;
+  const realListings=DATA.properties.filter(p=>p.source==='molit_csv').length;
   const period = (pv.tx_from&&pv.tx_to)
     ? `${pv.tx_from.slice(0,7)}~${pv.tx_to.slice(0,7)} · ${pv.tx_count.toLocaleString()}건`
     : null;
-  const chips=[
-    [`매매시세`, saleReal?`실API ${pv.sale_price_real}구`:'FALLBACK 근사', saleReal?'real':'fb'],
-    [`전세시세`, jeonseReal?`실API ${pv.jeonse_price_real}구`:'FALLBACK 근사', jeonseReal?'real':'fb'],
-  ];
+  const chips=[];
+  if(realListings>0) chips.push([`매물`, `국토부 실거래 실제 매물 ${realListings}건`, 'real']);
+  else chips.push([`매물`, `시연 샘플 ${DATA.stats.total}건`, 'fb']);
+  chips.push([`매매시세`, saleReal?`실거래 ${pv.sale_price_real}구`:'FALLBACK 근사', saleReal?'real':'fb']);
+  chips.push([`전세시세`, jeonseReal?`실거래 ${pv.jeonse_price_real}구`:'FALLBACK 근사', jeonseReal?'real':'fb']);
   if(period) chips.push([`실거래 기간`, period, 'real']);
   chips.push([`뉴스 감성`, `실기사 ${n.n_articles}건 · 기준선 ${n.city_index.toFixed(2)}`, 'live']);
   chips.push([`컴플라이언스`, `공공·제휴 데이터 · 무단 크롤링 배제`, 'real']);

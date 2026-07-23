@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     deal_date       TEXT,                      -- YYYY-MM-DD
     raw_ref         TEXT,                      -- 원본 API 레코드 참조(법정동명 등, 추적용)
     source          TEXT NOT NULL DEFAULT 'seoul_open_data'
-                        CHECK (source IN ('seoul_open_data','molit_api','partner_agency')),
+                        CHECK (source IN ('seoul_open_data','molit_api','molit_csv','partner_agency')),
     collected_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS properties (
     lat             REAL NOT NULL,
     lng             REAL NOT NULL,
     building_type   TEXT,                      -- 아파트/오피스텔/다세대 등
+    complex_name    TEXT,                      -- 실제 단지명(실거래 CSV 기반 실매물일 때)
     area_m2         REAL,
     build_year      INTEGER,
 
@@ -67,9 +68,10 @@ CREATE TABLE IF NOT EXISTS properties (
     deposit         INTEGER NOT NULL,          -- 전세 보증금 (만원)
     mortgage_amount INTEGER NOT NULL DEFAULT 0,-- 근저당 설정액 (만원, 등기부)
     is_illegal      INTEGER NOT NULL DEFAULT 0,-- 위반건축물 여부(건축물대장) 0/1
+    debt_known      INTEGER NOT NULL DEFAULT 1,-- 근저당 확인 여부(0=등기부 미연동 → 미확인)
 
     source          TEXT NOT NULL DEFAULT 'partner_agency'
-                        CHECK (source IN ('seoul_open_data','molit_api','iros_registry','partner_agency')),
+                        CHECK (source IN ('seoul_open_data','molit_api','molit_csv','iros_registry','partner_agency')),
     created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -117,8 +119,9 @@ CREATE TABLE IF NOT EXISTS finance_products (
 -- ---------------------------------------------------------------------
 CREATE VIEW IF NOT EXISTS v_property_latest_risk AS
 SELECT p.property_id, p.address, p.lat, p.lng, p.building_type,
-       p.area_m2, p.build_year,
+       p.complex_name, p.area_m2, p.build_year,
        p.sale_price, p.deposit, p.mortgage_amount, p.is_illegal,
+       p.debt_known, p.source,
        d.name AS district_name,
        d.jeonse_cv AS district_jeonse_cv,
        d.news_sentiment AS district_sentiment,

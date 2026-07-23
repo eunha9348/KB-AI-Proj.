@@ -61,16 +61,35 @@
 ### 0) 요구사항
 - Python 3.9+ (표준 라이브러리만으로 동작). Flask는 선택.
 
-### 1) DB 생성 (ETL)
+### 데이터 모드 3가지 (자동 선택: CSV > API > FALLBACK)
+
+| 모드 | 조건 | 개별 매물 |
+|------|------|-----------|
+| 🟢 **실제 매물 (권장)** | `data/realprice*.csv` 존재 | **실제 단지명·보증금·면적**(국토부 실거래) |
+| 🟡 실거래 평균 | `MOLIT_API_KEY` 또는 `SEOUL_API_KEY` | 자치구 실평균 기반 시연 샘플 |
+| ⚪ 폴백 | 키·CSV 모두 없음 | 근사 평균 기반 시연 샘플 |
+
+### ⭐ 1) 실제 매물 서비스 만들기 — API 키 불필요, CSV 다운로드만
+```bash
+# ① https://rt.molit.go.kr 접속 (로그인·인증키 불필요)
+#    아파트 → 전월세 → 지역(서울)·최근 기간 선택 → 'CSV 다운로드'
+#    (선택) 아파트 → 매매 도 같은 방식으로 다운로드 → 전세가율 추정에 사용
+# ② 받은 파일을 data/ 에 realprice_rent.csv / realprice_trade.csv 로 저장
+python data/etl.py
+# → 실제 단지명·보증금·전용면적으로 '실제 매물' 서비스 구성.
+#   근저당(등기부)은 공공데이터 미제공이라 '미확인'으로 표기(선순위채권비율=전세가율).
+#   상세 형식은 data/realprice_format_example.txt 참고.
+```
+
+### 1) DB 생성 (ETL) — CSV 없이 실행하면 시연 샘플
 ```bash
 python data/etl.py
-# → db/housing.db 생성, 자치구 25개 · 매물 300건 · 위험도 진단 적재 (FALLBACK 평균시세)
+# → db/housing.db 생성, 자치구 25개 · 매물 300건 · 위험도 진단 적재 (시연 샘플)
 
-# 실제 서울시 공공데이터 사용 시 (서울 열린데이터광장에서 인증키 발급 후):
-SEOUL_API_KEY=발급키 python data/etl.py
-# → 매매(tbLnOpendataRtms) + 전월세(tbLnOpendataRentV) 실거래가를 실제로 호출해
-#   자치구별 평균 매매가·전세가를 실데이터로 갱신하고, 원본 거래를 transactions 테이블에 적재.
-#   API 키가 없거나 호출이 실패하면 자동으로 FALLBACK 평균시세를 사용합니다(서비스 중단 없음).
+# 자치구 평균만 실거래로 갱신하려면 (국토부 data.go.kr 권장, 또는 서울 열린데이터광장):
+MOLIT_API_KEY=발급키 python data/etl.py     # 국토부(안정적), 또는
+SEOUL_API_KEY=발급키 python data/etl.py     # 서울 열린데이터광장
+#   실패하거나 키가 없으면 자동 FALLBACK (서비스 중단 없음, 지표별 출처 정직 표기).
 ```
 
 **매번 커맨드에 키를 붙이기 귀찮다면 `.env` 파일 사용:**
