@@ -197,6 +197,19 @@
   .evidence a{font-size:11.5px;display:flex;gap:6px;align-items:baseline;}
   .evidence a::before{content:"↗";color:var(--ink-faint);font-size:10px;}
 
+  /* 실존 확인(실제 위치·매물) */
+  .verify-note{font-size:11px;color:var(--ink-soft);line-height:1.55;margin-bottom:9px;
+    background:var(--warn-b);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent);
+    border-radius:var(--r-sm);padding:8px 10px;}
+  .verify-note b{color:var(--ink);}
+  .verify-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .vbtn{display:flex;align-items:center;gap:7px;justify-content:flex-start;font-size:12px;
+    font-weight:600;padding:10px 11px;border:1px solid var(--hairline);border-radius:var(--r-sm);
+    background:var(--panel-2);color:var(--ink);text-decoration:none;transition:border-color .12s,color .12s;}
+  .vbtn:hover{border-color:var(--accent);color:var(--accent);text-decoration:none;}
+  .vbtn .ico{font-size:15px;line-height:1;}
+  .vbtn .ext{margin-left:auto;color:var(--ink-faint);font-size:11px;}
+
   /* product card */
   .prod{border:1px solid var(--hairline);border-left:3px solid var(--kb);border-radius:var(--r-sm);
     padding:13px 14px;background:var(--panel-2);}
@@ -473,6 +486,23 @@ function showDetail(pid){
         </div>
         ${evi}
         <div class="note" style="margin-top:8px">전세가 변동성(CV): <b>${cvTxt}</b></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">실제 위치·매물 확인</div>
+      <div class="verify-note">이 카드는 자치구 평균 기반 <b>시연 샘플</b>입니다(특정 실제 매물이 아님).
+        아래 버튼은 이 매물 <b>좌표·지역의 실제</b> 거리사진·지도·실거래가로 연결되어, 해당 위치에
+        실제 부동산·거래가 존재함을 직접 확인할 수 있습니다.</div>
+      <div class="verify-grid">
+        <a class="vbtn" href="https://map.kakao.com/link/roadview/${p.lat},${p.lng}" target="_blank" rel="noopener">
+          <span class="ico">📷</span>거리 사진(로드뷰)<span class="ext">↗</span></a>
+        <a class="vbtn" href="https://map.kakao.com/link/map/${encodeURIComponent(p.district_name)},${p.lat},${p.lng}" target="_blank" rel="noopener">
+          <span class="ico">🗺️</span>지도에서 위치<span class="ext">↗</span></a>
+        <a class="vbtn" href="https://map.naver.com/p/search/${encodeURIComponent(p.district_name+' '+(p.building_type||''))}" target="_blank" rel="noopener">
+          <span class="ico">🏠</span>이 지역 매물·장소<span class="ext">↗</span></a>
+        <a class="vbtn" href="https://rt.molit.go.kr/" target="_blank" rel="noopener">
+          <span class="ico">📊</span>국토부 실거래가<span class="ext">↗</span></a>
       </div>
     </div>
 
